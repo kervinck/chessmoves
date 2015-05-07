@@ -1,5 +1,4 @@
 CFLAGS=-std=c99 -pedantic -Wall -O3
-CC=gcc-mp-4.9
 
 chessmoves:
 
