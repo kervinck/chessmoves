@@ -20,12 +20,13 @@
  *          Initial version based on move2san.c (which was based on MSCP).
  *      2015-05-06 (marcelk)
  *          Cleanup for better readability and no more global variables.
+ *      2015-05-07 (marcelk)
+ *          Fix refactoring bug in SAN disambiguation. Some more cleanup.
  *
  *  TODO: deploy for bookie-update.service
  *  TODO: cleanup: split chess and main
- *  TODO: cleanup: look for abbreviations
  *  TODO: cleanup: make comment style consistent
- *  TODO: cleanup: add desriptions to all functions
+ *  TODO: cleanup: add descriptions to all functions
  *  TODO: make function call order dependencies easier to understand
  *        (= rethinking functions with old naming)
  *  TODO: avoid crashing when kings are missing
@@ -364,29 +365,14 @@ static int setup_board(Board_t self, char *fen)
         // Castling flags
         while (isspace(fen[len])) len++;
         self->castleFlags = 0;
-        for (;;) {
+        for (;; len++) {
                 switch (fen[len]) {
-                case '-':
-                        len++;
-                        continue;
-                case 'K':
-                        self->castleFlags |= castleFlagWhiteKside;
-                        len++;
-                        continue;
-                case 'Q':
-                        self->castleFlags |= castleFlagWhiteQside;
-                        len++;
-                        continue;
-                case 'k':
-                        self->castleFlags |= castleFlagBlackKside;
-                        len++;
-                        continue;
-                case 'q':
-                        self->castleFlags |= castleFlagBlackQside;
-                        len++;
-                        continue;
-                default:
-                        break;
+                case 'K': self->castleFlags |= castleFlagWhiteKside; continue;
+                case 'Q': self->castleFlags |= castleFlagWhiteQside; continue;
+                case 'k': self->castleFlags |= castleFlagBlackKside; continue;
+                case 'q': self->castleFlags |= castleFlagBlackQside; continue;
+                case '-': len++; break;
+                default: break;
                 }
                 break;
         }
@@ -401,7 +387,7 @@ static int setup_board(Board_t self, char *fen)
                 len++;
 
                 rank = (sideToMove(self) == white) ? rank5 : rank4;
-                if (isdigit(fen[len])) len++;
+                if (isdigit(fen[len])) len++; // ignore what it says
 
                 self->enPassantPawn = square(file, rank);
         }
@@ -587,7 +573,7 @@ static void makeMove(Board_t self, int move)
         if (move & specialMoveFlag) {           // Handle specials first
                 switch (rank(from)) {
                 case rank8:
-                        // Black castles. Rewind and insert the corresponding rook move
+                        // Black castles. Insert the corresponding rook move
                         if (to == g8) {
                                 makeSimpleMove(h8, f8);
                         } else {
@@ -626,7 +612,7 @@ static void makeMove(Board_t self, int move)
                         break;
 
                 case rank1:
-                        // White castles. Rewind and insert the corresponding rook move
+                        // White castles. Insert the corresponding rook move
                         if (to == g1) {
                                 makeSimpleMove(h1, f1);
                         } else {
@@ -926,11 +912,8 @@ static void generate_moves(Board_t self)
 
 static char *moveToSan(Board_t self, char *san, int move, short *xmoves, int xlen)
 {
-        int from, to;
-        int filex = 0, rankx = 0;
-
-        from = from(move);
-        to   = to(move);
+        int from = from(move);
+        int to   = to(move);
 
         if (move == specialMove(e1, c1) || move == specialMove(e8, c8)) {
                 return stringCopy(san, "O-O-O");
@@ -953,8 +936,7 @@ static char *moveToSan(Board_t self, char *san, int move, short *xmoves, int xle
                 /*
                  *  Promote to piece (=Q, =R, =B, =N)
                  */
-                if (move > 4095
-                && (rank(to)==rank1 || rank(to)==rank8)) {
+                if (rank(to)==rank1 || rank(to)==rank8) {
                         *san++ = '=';
                         *san++ = promotionPieceToChar[move>>13];
                 }
@@ -970,18 +952,19 @@ static char *moveToSan(Board_t self, char *san, int move, short *xmoves, int xle
         /*
          *  Disambiguate using from-square information if needed
          */
+        int filex = 0, rankx = 0;
         for (int i=0; i<xlen; i++) {
                 int xmove = xmoves[i];
-                if (to != to(xmove)                     // must be same destination
-                 || move == xmove                       // but a different move
-                 || self->squares[from] != self->squares[from(xmove)] // and of same piece type
-                 || !isLegalMove(self, xmove)) {        // and legal (we assume 'move' itself is already legal here)
-                        continue;
+                if (to == to(xmove)                     // Must have same destination
+                 && move != xmove                       // Different move
+                 && self->squares[from] == self->squares[from(xmove)] // Same piece type
+                 && isLegalMove(self, xmove)            // And also legal
+                ) {
+                        rankx |= (rank(from) == rank(from(xmove))) + 1;
+                        filex |=  file(from) == file(from(xmove));
                 }
-                rankx |= (rank(from) == rank(xmove)) + 1; // gives disambiguation by 'file' precedence over 'rank'
-                filex |=  file(from) == file(xmove);
         }
-        if (rankx != filex) *san++ = fileToChar(file(from));
+        if (rankx != filex) *san++ = fileToChar(file(from)); // Skip if both are 0 or 1
         if (filex)          *san++ = rankToChar(rank(from));
 
         /*
@@ -1072,8 +1055,8 @@ static void boardToFen(Board_t self, char *fen)
         for (int rank=rank8; rank>=rank1; rank--) {
                 int emptySquares = 0;
                 for (int file=fileA; file<=fileH; file++) {
-                        int sq = square(file, rank);
-                        int piece = self->squares[sq];
+                        int square = square(file, rank);
+                        int piece = self->squares[square];
 
                         if (piece == empty) {
                                 emptySquares++;
@@ -1101,9 +1084,9 @@ static void boardToFen(Board_t self, char *fen)
 
         *fen++ = ' ';
         if (self->castleFlags) {
-                if (self->castleFlags & castleFlagWhiteKside)  *fen++ = 'K';
+                if (self->castleFlags & castleFlagWhiteKside) *fen++ = 'K';
                 if (self->castleFlags & castleFlagWhiteQside) *fen++ = 'Q';
-                if (self->castleFlags & castleFlagBlackKside)  *fen++ = 'k';
+                if (self->castleFlags & castleFlagBlackKside) *fen++ = 'k';
                 if (self->castleFlags & castleFlagBlackQside) *fen++ = 'q';
         } else {
                 *fen++ = '-';
