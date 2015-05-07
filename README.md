@@ -85,3 +85,23 @@ end
 $
 ```
 
+Another example, making a 'perft' counter in shell script:
+
+```
+$ cat perft.sh
+#!/bin/sh
+startpos='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -'
+perft() {
+        [ $1 -le 0 ] && wc -l && exit
+        chessmoves | grep ^move, | cut -d, -f3- | perft `expr $1 - 1`
+}
+echo $startpos | perft ${1:-1}
+
+$ time perft.sh 6
+ 4865609
+31.410 user, 0.803 sys, 0m20.35s real (100.00% cpu)
+
+$ python -c 'print 4865609 / 20.35' # --> results per second
+239096.265356
+```
+
