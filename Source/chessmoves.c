@@ -421,7 +421,7 @@ static void atk_slide(Board_t self, int from, int dirs, struct side *side)
         dirs &= kingDirections[from];
         int dir = 0;
         do {
-                dir -= dirs;
+                dir -= dirs; // pick next
                 dir &= dirs;
                 int to = from;
                 do {
@@ -429,7 +429,7 @@ static void atk_slide(Board_t self, int from, int dirs, struct side *side)
                         side->attacks[to] = 1;
                         if (self->squares[to] != empty) break;
                 } while (dir & kingDirections[to]);
-        } while (dirs -= dir);
+        } while (dirs -= dir); // remove and go to next
 }
 
 static void compute_attacks(Board_t self)
@@ -451,11 +451,11 @@ static void compute_attacks(Board_t self)
                         dirs = kingDirections[from];
                         dir = 0;
                         do {
-                                dir -= dirs;
+                                dir -= dirs; // pick next
                                 dir &= dirs;
                                 int to = from + kingStep[dir];
                                 self->whiteSide.attacks[to] = 1;
-                        } while (dirs -= dir);
+                        } while (dirs -= dir); // remove and go to next
                         self->whiteSide.king = from;
                         break;
 
@@ -463,11 +463,11 @@ static void compute_attacks(Board_t self)
                         dirs = kingDirections[from];
                         dir = 0;
                         do {
-                                dir -= dirs;
+                                dir -= dirs; // pick next
                                 dir &= dirs;
                                 int to = from + kingStep[dir];
                                 self->blackSide.attacks[to] = 1;
-                        } while (dirs -= dir);
+                        } while (dirs -= dir); // remove and go to next
                         self->blackSide.king = from;
                         break;
 
@@ -499,22 +499,22 @@ static void compute_attacks(Board_t self)
                         dirs = knightDirections[from];
                         dir = 0;
                         do {
-                                dir -= dirs;
+                                dir -= dirs; // pick next
                                 dir &= dirs;
                                 int to = from + knightJump[dir];
                                 self->whiteSide.attacks[to] = 1;
-                        } while (dirs -= dir);
+                        } while (dirs -= dir); // remove and go to next
                         break;
 
                 case blackKnight:
                         dirs = knightDirections[from];
                         dir = 0;
                         do {
-                                dir -= dirs;
+                                dir -= dirs; // pick next
                                 dir &= dirs;
                                 int to = from + knightJump[dir];
                                 self->blackSide.attacks[to] = 1;
-                        } while (dirs -= dir);
+                        } while (dirs -= dir); // remove and go to next
                         break;
 
                 case whitePawn:
@@ -697,7 +697,7 @@ static void generateSlides(Board_t self, int from, int dirs)
         dirs &= kingDirections[from];
         int dir = 0;
         do {
-                dir -= dirs;
+                dir -= dirs; // pick next
                 dir &= dirs;
                 int vector = kingStep[dir];
                 int to = from;
@@ -711,7 +711,7 @@ static void generateSlides(Board_t self, int from, int dirs)
                         }
                         pushMove(self, from, to);
                 } while (dir & kingDirections[to]);
-        } while (dirs -= dir);
+        } while (dirs -= dir); // remove and go to next
 }
 
 static int isLegalMove(Board_t self, int move)
@@ -747,13 +747,13 @@ static void generate_moves(Board_t self)
                         dirs = kingDirections[from];
                         dir = 0;
                         do {
-                                dir -= dirs;
+                                dir -= dirs; // pick next
                                 dir &= dirs;
                                 to = from + kingStep[dir];
                                 if (self->squares[to] != empty
                                  && pieceColor(self->squares[to]) == sideToMove(self)) continue;
                                 pushMove(self, from, to);
-                        } while (dirs -= dir);
+                        } while (dirs -= dir); // remove and go to next
                         break;
 
                 case whiteQueen:
@@ -776,7 +776,7 @@ static void generate_moves(Board_t self)
                         dirs = knightDirections[from];
                         dir = 0;
                         do {
-                                dir -= dirs;
+                                dir -= dirs; // pick next
                                 dir &= dirs;
                                 to = from + knightJump[dir];
                                 if (self->squares[to] != empty
@@ -784,7 +784,7 @@ static void generate_moves(Board_t self)
                                         continue;
                                 }
                                 pushMove(self, from, to);
-                        } while (dirs -= dir);
+                        } while (dirs -= dir); // remove and go to next
                         break;
 
                 case whitePawn:
@@ -1000,16 +1000,16 @@ static char *getCheckMark(Board_t self, char *out, int move)
         compute_attacks(self);
 
         if (inCheck(self)) { // in check, but is it checkmate?
-                int sign = '#';
+                int mark = '#';
                 short *start_moves = self->move_sp;
                 generate_moves(self);
                 while (self->move_sp > start_moves) {
                         if (isLegalMove(self, *--self->move_sp)) {
-                                sign = '+';
+                                mark = '+';
                                 self->move_sp = start_moves; // breaks the loop
                         }
                 }
-                *out++ = sign;
+                *out++ = mark;
         }
 
         undoMove(self);
