@@ -202,7 +202,7 @@ struct board {
  |      Forward declarations                                            |
  +----------------------------------------------------------------------*/
 
-static int readLine(FILE *fp, char **pLine, int *pAllocSize);
+static int readLine(FILE *fp, char **pLine, int *pMallocSize);
 static char *stringCopy(char *s, const char *t);
 static int compare_strcmp(const void *ap, const void *bp);
 
@@ -639,6 +639,7 @@ static void makeMove(Board_t self, int move)
         }
 
         self->plyNumber++;
+
 #if 0 // lastZeroing
         if (self->squares[to] != empty
          || self->squares[from] == whitePawn
@@ -649,11 +650,7 @@ static void makeMove(Board_t self, int move)
         }
 #endif
 
-        push(to, self->squares[to]);
-        push(from, self->squares[from]);
-
-        self->squares[to] = self->squares[from];
-        self->squares[from] = empty;
+        makeSimpleMove(from, to);
 
         int flagsToClear = castleFlagsClear[from] | castleFlagsClear[to];
         if (self->castleFlags & flagsToClear) {
@@ -699,9 +696,9 @@ static void pushPawnMove(Board_t self, int from, int to)
 
 static void generateSlides(Board_t self, int from, int dirs)
 {
-        int dir = 0;
-
         dirs &= kingDirections[from];
+
+        int dir = 0;
         do {
                 dir -= dirs;
                 dir &= dirs;
@@ -722,7 +719,7 @@ static void generateSlides(Board_t self, int from, int dirs)
 
 static int isLegalMove(Board_t self, int move)
 {
-        makeMove(self, move); // TODO: use quick_makeMove?
+        makeMove(self, move);
         compute_attacks(self);
         int legal = (self->side->attacks[self->xside->king] == 0);
         undoMove(self);
@@ -1004,7 +1001,7 @@ static char *getCheckMark(Board_t self, char *out, int move)
         makeMove(self, move);
         compute_attacks(self);
 
-        if (self->xside->attacks[self->side->king]) { // in check, but is it checkmate?
+        if (inCheck(self)) { // in check, but is it checkmate?
                 int sign = '#';
                 short *start_moves = self->move_sp;
                 generate_moves(self);
@@ -1052,7 +1049,7 @@ static void normalizeEnPassantStatus(Board_t self)
                 }
         }
 
-        self->enPassantPawn = 0; // Clear EP flag if there is no EP move available
+        self->enPassantPawn = 0; // Clear en passant flag if there is no such legal capture
 }
 
 /*----------------------------------------------------------------------+
@@ -1232,19 +1229,19 @@ int main(int argc, char *argv[])
  |      readLine                                                        |
  +----------------------------------------------------------------------*/
 
-static int readLine(FILE *fp, char **pLine, int *pAllocSize)
+static int readLine(FILE *fp, char **pLine, int *pMallocSize)
 {
         char *line = *pLine;
-        int allocSize = *pAllocSize;
+        int mallocSize = *pMallocSize;
         int len = 0;
 
         for (;;) {
                 /*
                  *  Ensure there is enough space for the next character and a terminator
                  */
-                if (len + 1 >= allocSize) {
-                        int newAllocSize = (allocSize > 0) ? (2 * allocSize) : 128;
-                        char *newLine = realloc(line, newAllocSize);
+                if (len + 1 >= mallocSize) {
+                        int newMallocSize = (mallocSize > 0) ? (2 * mallocSize) : 128;
+                        char *newLine = realloc(line, newMallocSize);
 
                         if (newLine == NULL) {
                                 fprintf(stderr, "*** Error: %s\n", strerror(errno));
@@ -1252,7 +1249,7 @@ static int readLine(FILE *fp, char **pLine, int *pAllocSize)
                         }
 
                         line = newLine;
-                        allocSize = newAllocSize;
+                        mallocSize = newMallocSize;
                 }
 
                 /*
@@ -1274,7 +1271,7 @@ static int readLine(FILE *fp, char **pLine, int *pAllocSize)
 
         line[len] = '\0';
         *pLine = line;
-        *pAllocSize = allocSize;
+        *pMallocSize = mallocSize;
 
         return len;
 }
