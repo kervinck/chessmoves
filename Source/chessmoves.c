@@ -211,6 +211,7 @@ static int compare_strcmp(const void *ap, const void *bp);
  +----------------------------------------------------------------------*/
 
 static const char pieceToChar[] = {
+        [empty] = 0,
         [whiteKing]   = 'K', [whiteQueen]  = 'Q', [whiteRook] = 'R',
         [whiteBishop] = 'B', [whiteKnight] = 'N', [whitePawn] = 'P',
         [blackKing]   = 'k', [blackQueen]  = 'q', [blackRook] = 'r',
@@ -222,7 +223,7 @@ static const char promotionPieceToChar[] = { 'Q', 'R', 'B', 'N' };
 /*
  *  Which castle bits to clear for a move's from and to
  */
-static char castleFlagsClear[boardSize] = {
+static const char castleFlagsClear[boardSize] = {
         [a8] = castleFlagBlackQside,
         [e8] = castleFlagBlackKside | castleFlagBlackQside,
         [h8] = castleFlagBlackKside,
@@ -231,14 +232,14 @@ static char castleFlagsClear[boardSize] = {
         [h1] = castleFlagWhiteKside,
 };
 
-static signed char kingStep[] = { // Offsets for king moves
+static const signed char kingStep[] = { // Offsets for king moves
         [1<<bitN] = stepN, [1<<bitNE] = stepNE,
         [1<<bitE] = stepE, [1<<bitSE] = stepSE,
         [1<<bitS] = stepS, [1<<bitSW] = stepSW,
         [1<<bitW] = stepW, [1<<bitNW] = stepNW,
 };
 
-static signed char knightJump[] = { // Offsets for knight jumps
+static const signed char knightJump[] = { // Offsets for knight jumps
         [1<<bitNNE] = jumpNNE, [1<<bitENE] = jumpENE,
         [1<<bitESE] = jumpESE, [1<<bitSSE] = jumpSSE,
         [1<<bitSSW] = jumpSSW, [1<<bitWSW] = jumpWSW,
@@ -416,19 +417,17 @@ static int setup_board(Board_t self, char *fen)
  |      attack tables                                                   |
  +----------------------------------------------------------------------*/
 
-static void atk_slide(Board_t self, int from, int dirs, struct side *s)
+static void atk_slide(Board_t self, int from, int dirs, struct side *side)
 {
-        int dir = 0;
-        int to;
-
         dirs &= kingDirections[from];
+        int dir = 0;
         do {
                 dir -= dirs;
                 dir &= dirs;
-                to = from;
+                int to = from;
                 do {
                         to += kingStep[dir];
-                        s->attacks[to] = 1;
+                        side->attacks[to] = 1;
                         if (self->squares[to] != empty) break;
                 } while (dir & kingDirections[to]);
         } while (dirs -= dir);
@@ -446,31 +445,31 @@ static void compute_attacks(Board_t self)
                 int piece = self->squares[from];
                 if (piece == empty) continue;
 
-                int dir, dirs;
-
                 switch (piece) {
+                        int dir, dirs;
+
                 case whiteKing:
-                        dir = 0;
-                        self->whiteSide.king = from;
                         dirs = kingDirections[from];
+                        dir = 0;
                         do {
                                 dir -= dirs;
                                 dir &= dirs;
                                 int to = from + kingStep[dir];
                                 self->whiteSide.attacks[to] = 1;
                         } while (dirs -= dir);
+                        self->whiteSide.king = from;
                         break;
 
                 case blackKing:
-                        dir = 0;
-                        self->blackSide.king = from;
                         dirs = kingDirections[from];
+                        dir = 0;
                         do {
                                 dir -= dirs;
                                 dir &= dirs;
                                 int to = from + kingStep[dir];
                                 self->blackSide.attacks[to] = 1;
                         } while (dirs -= dir);
+                        self->blackSide.king = from;
                         break;
 
                 case whiteQueen:
@@ -498,8 +497,8 @@ static void compute_attacks(Board_t self)
                         break;
 
                 case whiteKnight:
-                        dir = 0;
                         dirs = knightDirections[from];
+                        dir = 0;
                         do {
                                 dir -= dirs;
                                 dir &= dirs;
@@ -509,8 +508,8 @@ static void compute_attacks(Board_t self)
                         break;
 
                 case blackKnight:
-                        dir = 0;
                         dirs = knightDirections[from];
+                        dir = 0;
                         do {
                                 dir -= dirs;
                                 dir &= dirs;
@@ -697,7 +696,6 @@ static void pushPawnMove(Board_t self, int from, int to)
 static void generateSlides(Board_t self, int from, int dirs)
 {
         dirs &= kingDirections[from];
-
         int dir = 0;
         do {
                 dir -= dirs;
@@ -737,21 +735,22 @@ static void generate_moves(Board_t self)
                 int piece = self->squares[from];
                 if (piece == empty || pieceColor(piece) != sideToMove(self)) continue;
 
-                int dir, dirs;
                 int to;
 
                 /*
                  *  Generate moves for this piece
                  */
                 switch (piece) {
+                        int dir, dirs;
+
                 case whiteKing:
                 case blackKing:
-                        dir = 0;
                         dirs = kingDirections[from];
+                        dir = 0;
                         do {
                                 dir -= dirs;
                                 dir &= dirs;
-                                int to = from + kingStep[dir];
+                                to = from + kingStep[dir];
                                 if (self->squares[to] != empty
                                  && pieceColor(self->squares[to]) == sideToMove(self)) continue;
                                 pushMove(self, from, to);
@@ -775,8 +774,8 @@ static void generate_moves(Board_t self)
 
                 case whiteKnight:
                 case blackKnight:
-                        dir = 0;
                         dirs = knightDirections[from];
+                        dir = 0;
                         do {
                                 dir -= dirs;
                                 dir &= dirs;
