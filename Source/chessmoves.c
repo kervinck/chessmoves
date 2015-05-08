@@ -22,15 +22,16 @@
  *          Cleanup for better readability and no more global variables.
  *      2015-05-07 (marcelk)
  *          Fix refactoring bug in SAN disambiguation. Some more cleanup.
+ *      2015-05-08 (marcelk)
+ *          More cleanup.
  *
  *  TODO: deploy for bookie-update.service
  *  TODO: cleanup: split chess and main
- *  TODO: cleanup: make comment style consistent
+ *  TODO: cleanup: memory for stacks?
+ *  TODO: make python extension interface. Return list of tuples
  *  TODO: cleanup: add descriptions to all functions
  *  TODO: make function call order dependencies easier to understand
  *        (= rethinking functions with old naming)
- *  TODO: avoid crashing when kings are missing
- *  TODO: make python extension interface. Return list of tuples
  *  TODO: cleanup: error handling
  *  TODO: option to choose delimiter (for example: -d,). default ' '
  *  TODO: consider profiling
@@ -38,8 +39,8 @@
  *  TODO: handle 6-field FEN, detect automatically
  *  TODO: add notation options (simple algebraic, uci, ics, san, san+, san, ...)
  *  TODO: add normalization options (w/b, x, y, xy)
+ *  TODO: accept sloppy FENs with incomplete data, for example "k///////K w"
  *  TODO: add XFEN support
- *  TODO: remove dependencies on geometric assumptions
  */
 
 /*----------------------------------------------------------------------+
@@ -55,6 +56,10 @@
  |      Includes                                                        |
  +----------------------------------------------------------------------*/
 
+/*
+ *  Standard includes
+ */
+
 #include <ctype.h>
 #include <errno.h>
 #include <stddef.h>
@@ -62,32 +67,28 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ *  Own includes
+ */
+
+#include "geometry-a1b1.h"
+
+// Everything below here ought to be reasonably geometry-agnostic
+
 /*----------------------------------------------------------------------+
  |      Definitions                                                     |
  +----------------------------------------------------------------------*/
 
 /*
- *  Board geometry
+ *  Square notation
  */
 
-enum square {
-        a1, a2, a3, a4, a5, a6, a7, a8,
-        b1, b2, b3, b4, b5, b6, b7, b8,
-        c1, c2, c3, c4, c5, c6, c7, c8,
-        d1, d2, d3, d4, d5, d6, d7, d8,
-        e1, e2, e3, e4, e5, e6, e7, e8,
-        f1, f2, f3, f4, f5, f6, f7, f8,
-        g1, g2, g3, g4, g5, g6, g7, g8,
-        h1, h2, h3, h4, h5, h6, h7, h8,
-        boardSize
-};
+#define rankToChar(rank)        ('1'   + rankStep * ((rank) - rank1))
+#define charToRank(c)           (rank1 + rankStep * ((c) - '1'))
+#define fileToChar(file)        ('a'   + fileStep * ((file) - fileA))
+#define charToFile(c)           (fileA + fileStep * ((c) - 'a'))
 
-#define file(square)       ((square) >> 3)
-#define rank(square)       ((square) & 7)
-#define square(file, rank) (((file) << 3) | (rank))
-
-enum file { fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH };
-enum rank { rank1, rank2, rank3, rank4, rank5, rank6, rank7, rank8 };
+enum { rankStep = rank2 - rank1, fileStep = fileB - fileA }; // don't confuse with stepN, stepE
 
 /*
  *  Chess pieces
@@ -102,38 +103,29 @@ enum piece {
 enum pieceColor { white = 0, black = 1 };
 
 #define pieceColor(piece) ((piece) >= blackKing) // piece must not be 'empty'
-
-/*
- *  Square notation
- */
-
-#define rankToChar(r)           ('1' + (r))
-#define charToRank(c)           ((c) - '1')
-#define fileToChar(f)           ('a' + (f))
-#define charToFile(c)           ((c) - 'a')
-
 /*
  *  Moves
  *
- *  moveInt bits:
- *   0- 5       to-square
- *   6-11       from-square
- *  12          special flag
+ *  move integer bits are as follows:
+ *  0-5         to square
+ *  6-11        from square
+ *  12          special flag (castling, promotion, en passant capture, double pawn push)
  *  13-14       promotion: Q=0, R=1, B=2, N=3
  */
 
-#define move(from, to)          (((from) << 6) | (to))
+#define move(from, to)          (((from) << boardBits) | (to))
 enum moveFlags {
-        specialMoveFlag         = 1 << 12,
-        queenPromotionFlags     = 0 * (1 << 13),
-        rookPromotionFlags      = 1 * (1 << 13),
-        bishopPromotionFlags    = 2 * (1 << 13),
-        knightPromotionFlags    = 3 * (1 << 13),
+        specialMoveFlag         = 1 << (2*boardBits),
+        promotionBits           = 2*boardBits + 1,
+        queenPromotionFlags     = 0 << promotionBits,
+        rookPromotionFlags      = 1 << promotionBits,
+        bishopPromotionFlags    = 2 << promotionBits,
+        knightPromotionFlags    = 3 << promotionBits
 };
 #define specialMove(from, to)   (specialMoveFlag | move(from, to))
 
-#define from(move)              (((move) & 07700) >> 6)
-#define to(move)                ((move) & 00077)
+#define from(move)              (((move) >> boardBits) & ~(~0<<boardBits))
+#define to(move)                ( (move)               & ~(~0<<boardBits))
 
 /*
  *  Move and attack directions
@@ -153,9 +145,11 @@ enum {
 enum stepBit { bitN, bitNE, bitE, bitSE, bitS, bitSW, bitW, bitNW };
 enum jumpBit { bitNNE, bitENE, bitESE, bitSSE, bitSSW, bitWSW, bitWNW, bitNNW };
 
-#define dirsRook        ((1 << bitN)  | (1 << bitE)  | (1 << bitS)  | (1 << bitW))
-#define dirsBishop      ((1 << bitNE) | (1 << bitSE) | (1 << bitSW) | (1 << bitNW))
-#define dirsQueen       (dirsRook | dirsBishop)
+enum {
+        dirsRook   = (1 << bitN)  | (1 << bitE)  | (1 << bitS)  | (1 << bitW),
+        dirsBishop = (1 << bitNE) | (1 << bitSE) | (1 << bitSW) | (1 << bitNW),
+        dirsQueen  = dirsRook | dirsBishop
+};
 
 /*
  *  Game state
@@ -208,7 +202,7 @@ struct board {
  |      Forward declarations                                            |
  +----------------------------------------------------------------------*/
 
-static int readLine(FILE *fp, char **pLine, int *pSize);
+static int readLine(FILE *fp, char **pLine, int *pAllocSize);
 static char *stringCopy(char *s, const char *t);
 static int compare_strcmp(const void *ap, const void *bp);
 
@@ -237,12 +231,14 @@ static char castleFlagsClear[boardSize] = {
         [h1] = castleFlagWhiteKside,
 };
 
-static signed char kingStep[] = {   /* Offsets for king moves */
-        [1<<bitN] = stepN, [1<<bitNE] = stepNE, [1<<bitE] = stepE, [1<<bitSE] = stepSE,
-        [1<<bitS] = stepS, [1<<bitSW] = stepSW, [1<<bitW] = stepW, [1<<bitNW] = stepNW,
+static signed char kingStep[] = { // Offsets for king moves
+        [1<<bitN] = stepN, [1<<bitNE] = stepNE,
+        [1<<bitE] = stepE, [1<<bitSE] = stepSE,
+        [1<<bitS] = stepS, [1<<bitSW] = stepSW,
+        [1<<bitW] = stepW, [1<<bitNW] = stepNW,
 };
 
-static signed char knightJump[] = { /* Offsets for knight jumps */
+static signed char knightJump[] = { // Offsets for knight jumps
         [1<<bitNNE] = jumpNNE, [1<<bitENE] = jumpENE,
         [1<<bitESE] = jumpESE, [1<<bitSSE] = jumpSSE,
         [1<<bitSSW] = jumpSSW, [1<<bitWSW] = jumpWSW,
@@ -319,51 +315,64 @@ static const unsigned char knightDirections[] = {
 
 static int setup_board(Board_t self, char *fen)
 {
-        int file = fileA, rank = rank8;
         int len = 0;
 
-        // Squares
+        /*
+         *  Squares
+         */
+
         while (isspace(fen[len])) len++;
+
+        int file = fileA, rank = rank8;
+        int nrWhiteKings = 0, nrBlackKings = 0;
         memset(self->squares, empty, boardSize);
-        while (rank > rank1 || file <= fileH) {
+        while (rank != rank1 || file != fileH + fileStep) {
                 int piece = empty;
                 int count = 1;
 
                 switch (fen[len]) {
-                case 'K': piece = whiteKing; break;
+                case 'K': piece = whiteKing; nrWhiteKings++; break;
                 case 'Q': piece = whiteQueen; break;
                 case 'R': piece = whiteRook; break;
                 case 'B': piece = whiteBishop; break;
                 case 'N': piece = whiteKnight; break;
                 case 'P': piece = whitePawn; break;
-                case 'k': piece = blackKing; break;
+                case 'k': piece = blackKing; nrBlackKings++; break;
                 case 'r': piece = blackRook; break;
                 case 'q': piece = blackQueen; break;
                 case 'b': piece = blackBishop; break;
                 case 'n': piece = blackKnight; break;
                 case 'p': piece = blackPawn; break;
-                case '/': rank -= 1; file = fileA; len++; continue;
+                case '/': rank -= rankStep; file = fileA; len++; continue;
                 case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8':
                         count = fen[len] - '0';
                         break;
                 default:
-                        return 0; /* FEN error */
+                        return 0; // FEN error
                 }
                 do {
                         self->squares[square(file,rank)] = piece;
-                        file++;
-                } while (--count);
+                        file += fileStep;
+                } while (--count && file != fileH + fileStep);
                 len++;
         }
+        if (nrWhiteKings != 1 || nrBlackKings != 1) return 0;
 
-        // Side-to-move
+        /*
+         *  Side to move
+         */
+
         self->plyNumber = 2 + (fen[len+1] == 'b'); // 2 means full move number starts at 1
         //self->lastZeroing = self->plyNumber;
         len += 2;
 
-        // Castling flags
+        /*
+         *  Castling flags
+         */
+
         while (isspace(fen[len])) len++;
+
         self->castleFlags = 0;
         for (;; len++) {
                 switch (fen[len]) {
@@ -377,8 +386,12 @@ static int setup_board(Board_t self, char *fen)
                 break;
         }
 
-        // En-passant target square
+        /*
+         *  En passant square
+         */
+
         while (isspace(fen[len])) len++;
+
         if (fen[len] == '-') {
                 self->enPassantPawn = 0;
                 len++;
@@ -588,7 +601,7 @@ static void makeMove(Board_t self, int move)
                         } else {
                                 // White promotes
                                 push(from, self->squares[from]);
-                                self->squares[from] = whiteQueen + (move>>13);
+                                self->squares[from] = whiteQueen + (move >> promotionBits);
                         }
                         break;
 
@@ -607,7 +620,7 @@ static void makeMove(Board_t self, int move)
                         } else {
                                 // Black promotes
                                 push(from, self->squares[from]);
-                                self->squares[from] = blackQueen + (move>>13);
+                                self->squares[from] = blackQueen + (move >> promotionBits);
                         }
                         break;
 
@@ -938,7 +951,7 @@ static char *moveToSan(Board_t self, char *san, int move, short *xmoves, int xle
                  */
                 if (rank(to)==rank1 || rank(to)==rank8) {
                         *san++ = '=';
-                        *san++ = promotionPieceToChar[move>>13];
+                        *san++ = promotionPieceToChar[move>>promotionBits];
                 }
                 *san = '\0';
                 return san;
@@ -950,7 +963,7 @@ static char *moveToSan(Board_t self, char *san, int move, short *xmoves, int xle
         *san++ = toupper(pieceToChar[self->squares[from]]);
 
         /*
-         *  Disambiguate using from-square information if needed
+         *  Disambiguate using from square information where needed
          */
         int filex = 0, rankx = 0;
         for (int i=0; i<xlen; i++) {
@@ -960,7 +973,7 @@ static char *moveToSan(Board_t self, char *san, int move, short *xmoves, int xle
                  && self->squares[from] == self->squares[from(xmove)] // Same piece type
                  && isLegalMove(self, xmove)            // And also legal
                 ) {
-                        rankx |= (rank(from) == rank(from(xmove))) + 1;
+                        rankx |= (rank(from) == rank(from(xmove))) + 1; // Tricky but correct
                         filex |=  file(from) == file(from(xmove));
                 }
         }
@@ -973,7 +986,7 @@ static char *moveToSan(Board_t self, char *san, int move, short *xmoves, int xle
         if (self->squares[to] != empty) *san++ = 'x';
 
         /*
-         *  to-square
+         *  To square
          */
         *san++ = fileToChar(file(to));
         *san++ = rankToChar(rank(to));
@@ -1049,12 +1062,11 @@ static void normalizeEnPassantStatus(Board_t self)
 static void boardToFen(Board_t self, char *fen)
 {
         /*
-         *  Board
+         *  Squares
          */
-
-        for (int rank=rank8; rank>=rank1; rank--) {
+        for (int rank=rank8; rank!=rank1-rankStep; rank-=rankStep) {
                 int emptySquares = 0;
-                for (int file=fileA; file<=fileH; file++) {
+                for (int file=fileA; file!=fileH+fileStep; file+=fileStep) {
                         int square = square(file, rank);
                         int piece = self->squares[square];
 
@@ -1072,16 +1084,14 @@ static void boardToFen(Board_t self, char *fen)
         }
 
         /*
-         *  Side-to-move indicator
+         *  Side to move
          */
-
         *fen++ = ' ';
         *fen++ = (sideToMove(self) == white) ? 'w' : 'b';
 
         /*
          *  Castling flags
          */
-
         *fen++ = ' ';
         if (self->castleFlags) {
                 if (self->castleFlags & castleFlagWhiteKside) *fen++ = 'K';
@@ -1095,7 +1105,6 @@ static void boardToFen(Board_t self, char *fen)
         /*
          *  En-passant square
          */
-
         *fen++ = ' ';
         normalizeEnPassantStatus(self);
         if (self->enPassantPawn) {
@@ -1168,7 +1177,7 @@ static void chessmoves(Board_t self)
                         out = getCheckMark(self, out, move);
                         *out++ = ',';
                         out = stringCopy(out, new_fen);
-                        out++;
+                        out++; // past the zero
 
                 } else {
                         /*
@@ -1181,7 +1190,7 @@ static void chessmoves(Board_t self)
         self->move_sp = start_moves; // clean move stack
 
         // Sort lines alphabetically (so by SAN)
-        qsort(lines, n, sizeof(lines[0]), compare_strcmp);
+        qsort(lines, n, sizeof lines[0], compare_strcmp);
 
         // Output the sorted lines
         for (int i=0; i<n; i++) {
@@ -1199,28 +1208,23 @@ static void chessmoves(Board_t self)
 int main(int argc, char *argv[])
 {
         char *line = NULL;
-        int size = 0;
+        int mallocSize = 0;
         int lineNumber = 0;
 
         struct board board;
 
-        while (readLine(stdin, &line, &size) > 0) {
+        while (readLine(stdin, &line, &mallocSize) > 0) {
                 lineNumber += 1;
 
-                int fenLen = setup_board(&board, line);
-
-                if (fenLen <= 0) {
-                        // No valid FEN found. Stop
-                        fprintf(stderr, "*** Error: Input line %d contains no FEN data\n", lineNumber);
-                        break;
+                int len = setup_board(&board, line);
+                if (len <= 0) {
+                        fprintf(stderr, "*** Warning: no valid FEN on line %d\n", lineNumber);
+                } else {
+                        chessmoves(&board);
                 }
-
-                chessmoves(&board);
         }
 
         free(line);
-        line = NULL;
-
         return 0;
 }
 
@@ -1228,27 +1232,27 @@ int main(int argc, char *argv[])
  |      readLine                                                        |
  +----------------------------------------------------------------------*/
 
-static int readLine(FILE *fp, char **pLine, int *pSize)
+static int readLine(FILE *fp, char **pLine, int *pAllocSize)
 {
         char *line = *pLine;
-        int size = *pSize;
+        int allocSize = *pAllocSize;
         int len = 0;
 
         for (;;) {
                 /*
                  *  Ensure there is enough space for the next character and a terminator
                  */
-                if (len + 1 >= size) {
-                        int newsize = (size > 0) ? (2 * size) : 128;
-                        char *newline = realloc(line, newsize);
+                if (len + 1 >= allocSize) {
+                        int newAllocSize = (allocSize > 0) ? (2 * allocSize) : 128;
+                        char *newLine = realloc(line, newAllocSize);
 
-                        if (newline == NULL) {
+                        if (newLine == NULL) {
                                 fprintf(stderr, "*** Error: %s\n", strerror(errno));
                                 exit(EXIT_FAILURE);
                         }
 
-                        line = newline;
-                        size = newsize;
+                        line = newLine;
+                        allocSize = newAllocSize;
                 }
 
                 /*
@@ -1270,7 +1274,7 @@ static int readLine(FILE *fp, char **pLine, int *pSize)
 
         line[len] = '\0';
         *pLine = line;
-        *pSize = size;
+        *pAllocSize = allocSize;
 
         return len;
 }

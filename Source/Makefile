@@ -5,7 +5,7 @@ chessmoves:
 clean:
 	rm -f chessmoves
 
-gentest:
-	../Tools/run-perft < ../Data/perft-random.epd
+test:
+	env PATH=.:$$PATH ../Tools/run-perft 3 < ../Data/perft-random.epd
 
 # vi: noexpandtab

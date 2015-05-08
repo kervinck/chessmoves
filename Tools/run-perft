@@ -1,12 +1,7 @@
 #!/bin/bash -e
 
 # Arguments
-if [ $# -ge 1 ]
-then
-        maxdepth=$1
-else
-        maxdepth=3
-fi
+maxdepth=${1:-1}
 
 #
 #  Perft as a shell filter.
@@ -19,33 +14,23 @@ perft()
         then
                 cat
         else
-                ./chessmoves |
+                chessmoves |
                 awk -F, '/^move,/{print$3}' |
                 perft $(($depth - 1))
         fi
 }
 
-#
-#  Extract positions, depth and expected result from input
-#  Format as in perft-random.epd (which is not really epd)
-#
-awk -v maxdepth=$maxdepth '
-/^id / { id = $2 }
-/^epd / { pos = $2 FS $3 FS $4 FS $5 }
-/^perft / {
-        depth = $2
-        expected = $3
-        if (depth <= maxdepth) {
-                printf "%s %s %s %s\n", id, pos, depth, expected
-        }
+awk -F'[; ] *' -v maxdepth=$maxdepth '
+($8 <= maxdepth) {
+        print $6, $8, $1, $2, $3, $4, $9
 }' |
 
 #
 #  Run each through perft and check result
 #
-while read id pos1 pos2 pos3 pos4 depth expected
+while read id depth pos1 pos2 pos3 pos4 expected
 do
-        echo -n $id $pos1 $pos2 $pos3 $pos4 $depth $expected ""
+        echo -n $id $depth $pos1 $pos2 $pos3 $pos4 $expected ""
 
         result=`
                 echo $pos1 $pos2 $pos3 $pos4 |
