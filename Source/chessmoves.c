@@ -71,7 +71,7 @@
  *  Own includes
  */
 
-#include "geometry-a1b1.h"
+#include "geometry-a1a2.h"
 
 // Everything below here ought to be reasonably geometry-agnostic
 
