@@ -3,23 +3,6 @@
 # Arguments
 maxdepth=${1:-1}
 
-#
-#  Perft as a shell filter.
-#  Read positions on input and produce one level deeper positions on output
-#
-perft()
-{
-        depth=$1
-        if [ $depth -le 0 ]
-        then
-                cat
-        else
-                chessmoves |
-                awk -F, '/^move,/{print$3}' |
-                perft $(($depth - 1))
-        fi
-}
-
 awk -F'[; ] *' -v maxdepth=$maxdepth '
 ($8 <= maxdepth) {
         print $6, $8, $1, $2, $3, $4, $9
@@ -32,11 +15,7 @@ while read id depth pos1 pos2 pos3 pos4 expected
 do
         echo -n $id $depth $pos1 $pos2 $pos3 $pos4 $expected ""
 
-        result=`
-                echo $pos1 $pos2 $pos3 $pos4 |
-                perft $depth |
-                wc -l
-        `
+        result=`echo $pos1 $pos2 $pos3 $pos4 | python Tools/perft.py $depth`
 
         if [ "$result" -eq "$expected" ]
         then

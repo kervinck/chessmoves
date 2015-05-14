@@ -6,11 +6,7 @@ Chess move and position (SAN/FEN) generation in C for use in scripting applicati
 scripting environment, such as Python or sh.
 
 In the core this is a set of C functions for chess move making, wrapped for
-easy command line use. The move generator is a simple and very reliable
-mailbox-based set of functions originating from the MSCP v1.4 chess program.
-For reference, MSCP has played 2.5 million games against human opponents
-on the Internet Chess Servers FICS and ICC. The code has been heavily
-cleaned up and it passes all known so-called 'perft' tests.
+easy use.
 
 All input and output is in the form of FEN strings for positions.
 SAN notation for moves is made available as well.
@@ -97,7 +93,7 @@ perft() {
 }
 echo $startpos | perft ${1:-1}
 
-$ time perft.sh 6
+$ time perft.sh 5
  4865609
 31.410 user, 0.803 sys, 0m20.35s real (100.00% cpu)
 
