@@ -5,12 +5,11 @@ module1 = Extension(
         sources = [
                 'Source/chessmovesmodule.c',
                 'Source/Board.c',
-                'Source/readLine.c',
                 'Source/stringCopy.c'])
 
 setup(
         name         = 'chessmoves',
-        version      = '1.0x',
+        version      = '1.0a',
         description  = 'Package to generate chess positions and moves (FEN/SAN/UCI)',
         author       = 'Marcel van Kervinck',
         author_email = 'marcelk@bitpit.net',
