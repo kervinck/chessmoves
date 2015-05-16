@@ -16,37 +16,38 @@ in the first place.
 The output is comma-separated by default and designed to be easy to
 process by other text processing programs.
 
+Python module interface:
+------------------------
+
 ```
 NAME
     chessmoves - Chess move and position generation (SAN/FEN/UCI).
 
 FUNCTIONS
     moves(...)
-        moves(position, notation='san+') -> { move : newPosition, ... }
-
+        moves(position, notation='san') -> { move : newPosition, ... }
+        
         Generate all legal moves from a position.
         Return the result as a dictionary, mapping moves to positions.
-
+        
         The `notation' keyword controls the output move syntax.
         Available are:
-         - san:  Standard Algebraic Notation (e.g. Nc3, O-O, dxe8=Q)
-         - long: Long Algebraic Notation (e.g. Nb1-c3, O-O, d7xe8=Q)
+         - san:  Standard Algebraic Notation (e.g. Nc3+, O-O, dxe8=Q)
+         - long: Long Algebraic Notation (e.g. Nb1-c3+, O-O, d7xe8=Q)
          - uci:  Universal Chess Interface computer notation (e.g. b1c3, e8g8, d7e8q)
-         All of the above omit any check(+) and checkmate(#) indicators.
-         To get these as well, append a plus character to the keyword.
-
+    
     position(...)
-        position(position) -> position
-
-        Parse a FEN-like string and convert it into a standardized FEN.
+        position(inputFen) -> standardFen
+        
+        Parse a FEN like string and convert it into a standardized FEN.
         For example:
          - Complete short ranks
          - Order castling flags
-         - Remove bogus en passant target square if there is no such legal capture
+         - Remove en passant target square if there is no such legal capture
          - Remove excess data beyond the FEN
 
 DATA
-    notations = ['uci', 'uci+', 'san', 'san+', 'long', 'long+']
+    notations = ['uci', 'san', 'long']
     startPosition = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - ...
 ```
 

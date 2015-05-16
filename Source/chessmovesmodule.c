@@ -21,7 +21,7 @@ PyDoc_STRVAR(chessmoves_doc,
  +----------------------------------------------------------------------*/
 
 static char *notations[] = {
-        "uci", "uci+", "san", "san+", "long", "long+"
+        "uci", "san", "long"
 };
 enum { nrNotations = sizeof notations / sizeof notations[0] };
 
@@ -30,25 +30,23 @@ enum { nrNotations = sizeof notations / sizeof notations[0] };
  +----------------------------------------------------------------------*/
 
 PyDoc_STRVAR(moves_doc,
-"moves(position, notation='san+') -> { move : newPosition, ... }\n"
+"moves(position, notation='san') -> { move : newPosition, ... }\n"
 "\n"
 "Generate all legal moves from a position.\n"
 "Return the result as a dictionary, mapping moves to positions.\n"
 "\n"
 "The `notation' keyword controls the output move syntax.\n"
 "Available are:\n"
-" - san:  Standard Algebraic Notation (e.g. Nc3, O-O, dxe8=Q)\n"
-" - long: Long Algebraic Notation (e.g. Nb1-c3, O-O, d7xe8=Q)\n"
-" - uci:  Universal Chess Interface computer notation (e.g. b1c3, e8g8, d7e8q)\n"
-" All of the above omit any check(+) and checkmate(#) indicators.\n"
-" To get these as well, append a plus character to the keyword."
+" - san:  Standard Algebraic Notation (e.g. Nc3+, O-O, dxe8=Q)\n"
+" - long: Long Algebraic Notation (e.g. Nb1-c3+, O-O, d7xe8=Q)\n"
+" - uci:  Universal Chess Interface computer notation (e.g. b1c3, e8g8, d7e8q)"
 );
 
 static PyObject *
 chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
 {
         char *fen;
-        char *notation = "san+"; // default
+        char *notation = "san"; // default
 
         static char *kwlist[] = { "fen", "notation", NULL };
 
@@ -104,22 +102,20 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
                         char moveString[16];
                         char *s = moveString;
 
-                        switch (notationIndex / 2) {
+                        switch (notationIndex) {
                         case 0:
                                 s = moveToUci(&board, s, move);
                                 break;
                         case 1:
                                 s = moveToStandardAlgebraic(&board, s, move, start_moves, nr_pmoves);
+                                s = getCheckMark(&board, s, move);
                                 break;
                         case 2:
                                 s = moveToLongAlgebraic(&board, s, move);
+                                s = getCheckMark(&board, s, move);
                                 break;
                         default:
                                 assert(0);
-                        }
-
-                        if (notationIndex & 1) {
-                                s = getCheckMark(&board, s, move);
                         }
 
                         PyObject *key = PyString_FromString(moveString);
@@ -154,13 +150,13 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
  +----------------------------------------------------------------------*/
 
 PyDoc_STRVAR(position_doc,
-"position(position) -> position\n"
+"position(inputFen) -> standardFen\n"
 "\n"
-"Parse a FEN-like string and convert it into a standardized FEN.\n"
+"Parse a FEN like string and convert it into a standardized FEN.\n"
 "For example:\n"
 " - Complete short ranks\n"
 " - Order castling flags\n"
-" - Remove bogus en passant target square if there is no such legal capture\n"
+" - Remove en passant target square if there is no such legal capture\n"
 " - Remove excess data beyond the FEN"
 );
 
@@ -192,7 +188,7 @@ chessmovesmodule_position(PyObject *self, PyObject *args)
 
 #if 0
 PyDoc_STRVAR(move_doc,
-"move(position, move, notation='san+') -> move\n"
+"move(position, move, notation='san') -> move\n"
 "\n"
 "Parse a move and check if it is legal in the position.\n"
 "If so, return the move in the selected notation.\n"
@@ -204,7 +200,7 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
 {
         char *fen;
         char *move;
-        char *notation = "san+"; // default
+        char *notation = "san"; // default
 
         static char *kwlist[] = { "fen", "move", "notation", NULL };
 
