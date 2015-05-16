@@ -1,17 +1,16 @@
 Chessmoves
 ==========
-Chess move and position (SAN/FEN) generation in C for use in scripting applications.
+Chess move and position (FEN/SAN/UCI) generation in C for use in scripting
+applications.
 
 `Chessmoves' is a small kit to make fast chess tree traversal available in a
 scripting environment, such as Python or sh.
 
 In the core this is a set of C functions for chess move making, wrapped for
 easy use. All input and output is in the form of FEN strings for positions.
-SAN notation for moves is made available as well.
-
-The FEN output is stricty sanitized. For example, no fake en-passant target
-square flag is produced when there is no such legal capture in the position
-in the first place.
+SAN notation for moves is made available as well. The FEN output is stricty
+sanitized. For example, no fake en-passant target square flag is produced
+when there is no such legal capture in the position in the first place.
 
 The output is comma-separated by default and designed to be easy to
 process by other text processing programs.
