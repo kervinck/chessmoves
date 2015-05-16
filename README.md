@@ -51,8 +51,24 @@ DATA
     startPosition = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - ...
 ```
 
-Example:
+Example of the Python extension:
+```
+>>> import chessmoves
+>>> moves = chessmoves.moves(chessmoves.startPosition)
+>>> print moves.keys()
+['g3', 'f3', 'f4', 'h3', 'Nc3', 'h4', 'b4', 'Na3', 'a3', 'g4', 'Nf3', 'a4', 'Nh3', 'b3', 'c3', 'e4', 'd4', 'd3', 'e3', 'c4']
+>>> print moves['e4']
+rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -
+```
+Performance of the Python extension:
+```
+$ echo rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - | time python Tools/perft.py 5
+4865609
+        3.29 real         3.27 user         0.01 sys
+# --> results per second: 1,478,909
+```
 
+Example of the command line tool (shell/C):
 ```
 $ cat in.epd
 rnbqk2r/ppp1bppp/4pn2/3p4/2P5/5NP1/PP1PPPBP/RNBQ1RK1 b kq -
@@ -113,9 +129,7 @@ move,f8=R,5R1r/8/3k4/4N1Kb/8/8/8/8 b - -
 end
 $
 ```
-
-Another example, making a 'perft' counter in shell script:
-
+Performance of the shell/C tool:
 ```
 $ cat perft.sh
 #!/bin/sh
@@ -129,8 +143,7 @@ echo $startpos | perft ${1:-1}
 $ time perft.sh 5
  4865609
 31.410 user, 0.803 sys, 0m20.35s real (100.00% cpu)
-
-$ python -c 'print 4865609 / 20.35' # --> results per second
-239096.265356
+# --> results per second: 239,096
 ```
+
 
