@@ -120,10 +120,10 @@ static void chessmoves(Board_t self)
                          *  If legal print move and resulting position
                          */
 
+                        const char *checkmark = getCheckMark(self);
+
                         char new_fen[128];
                         boardToFen(self, new_fen);
-
-                        const char *checkmark = getCheckMark(self);
 
                         undoMove(self);
 
