@@ -109,19 +109,25 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
                 char *s = moveString;
                 const char *checkmark;
 
+                // value is new position
+                char newFen[128];
+
                 switch (notationIndex) {
                 case uciNotation:
+                        boardToFen(&board, newFen);
                         undoMove(&board);
                         s = moveToUci(&board, s, move);
                         break;
                 case sanNotation:
                         checkmark = getCheckMark(&board);
+                        boardToFen(&board, newFen);
                         undoMove(&board);
                         s = moveToStandardAlgebraic(&board, s, move, start_moves, nr_pmoves);
                         s = stringCopy(s, checkmark);
                         break;
                 case longNotation:
                         checkmark = getCheckMark(&board);
+                        boardToFen(&board, newFen);
                         undoMove(&board);
                         s = moveToLongAlgebraic(&board, s, move);
                         s = stringCopy(s, checkmark);
@@ -129,10 +135,6 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
                 default:
                         assert(0);
                 }
-
-                // value is new position
-                char newFen[128];
-                boardToFen(&board, newFen);
 
                 PyObject *key = PyString_FromString(moveString);
                 if (!key) {
