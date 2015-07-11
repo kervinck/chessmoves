@@ -58,7 +58,7 @@ void undoMove(Board_t self);
 char *moveToStandardAlgebraic(Board_t self, char *moveString, int move, short *xmoves, int xlen);
 char *moveToLongAlgebraic(Board_t self, char *moveString, int move);
 char *moveToUci(Board_t self, char *moveString, int move);
-char *getCheckMark(Board_t self, char *out, int move);
+const char *getCheckMark(Board_t self);
 int parse_move(char *line, int *num);
 
 /*----------------------------------------------------------------------+

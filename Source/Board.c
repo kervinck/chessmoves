@@ -989,30 +989,27 @@ extern char *moveToStandardAlgebraic(Board_t self, char *moveString, int move, s
  +----------------------------------------------------------------------*/
 
 /*
- *  Produce a checkmark ('+' or '#')
+ *  Produce a checkmark ('+' or '#').
+ *  The move must already be made and side_info computed.
+ *  side_info might be invalid after this function.
  */
-extern char *getCheckMark(Board_t self, char *out, int move)
+extern const char *getCheckMark(Board_t self)
 {
-        makeMove(self, move);
-        compute_side_info(self);
+        const char *checkmark = "";
 
         if (inCheck(self)) { // in check, but is it checkmate?
-                int mark = '#';
+                checkmark = "#";
                 short *start_moves = self->move_sp;
                 generate_moves(self);
                 while (self->move_sp > start_moves) {
                         if (isLegalMove(self, *--self->move_sp)) {
-                                mark = '+';
+                                checkmark = "+";
                                 self->move_sp = start_moves; // breaks the loop
                         }
                 }
-                *out++ = mark;
         }
 
-        undoMove(self);
-
-        *out = '\0';
-        return out;
+        return checkmark;
 }
 
 /*----------------------------------------------------------------------+

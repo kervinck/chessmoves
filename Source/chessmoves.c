@@ -123,6 +123,8 @@ static void chessmoves(Board_t self)
                         char new_fen[128];
                         boardToFen(self, new_fen);
 
+                        const char *checkmark = getCheckMark(self);
+
                         undoMove(self);
 
                         /*
@@ -132,7 +134,7 @@ static void chessmoves(Board_t self)
                         lines[n++] = out; // new output line
 
                         out = moveToStandardAlgebraic(self, out, move, start_moves, nr_pmoves);
-                        out = getCheckMark(self, out, move);
+                        out = stringCopy(out, checkmark);
                         *out++ = ',';
                         out = stringCopy(out, new_fen);
                         out++; // past the zero
