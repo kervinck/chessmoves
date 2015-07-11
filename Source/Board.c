@@ -888,7 +888,7 @@ extern char *moveToLongAlgebraic(Board_t self, char *moveString, int move)
         *moveString++ = rankToChar(rank(from));
 
         // Capture mark
-        if (self->squares[to] != empty) *moveString++ = 'x';
+        *moveString++ = (self->squares[to] == empty) ? '-' : 'x';
 
         // To square
         *moveString++ = fileToChar(file(to));
