@@ -104,10 +104,6 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
                         continue;
                 }
 
-                // value is new position
-                char newFen[128];
-                boardToFen(&board, newFen);
-
                 // key is move
                 char moveString[16];
                 char *s = moveString;
@@ -133,6 +129,10 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
                 default:
                         assert(0);
                 }
+
+                // value is new position
+                char newFen[128];
+                boardToFen(&board, newFen);
 
                 PyObject *key = PyString_FromString(moveString);
                 if (!key) {
