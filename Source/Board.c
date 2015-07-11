@@ -311,10 +311,7 @@ extern int setup_board(Board_t self, const char *fen)
 
         while (isspace(fen[len])) len++;
 
-        if (fen[len] == '-') {
-                self->enPassantPawn = 0;
-                len++;
-        } else {
+        if ('a' <= fen[len] && fen[len] <= 'h') {
                 file = charToFile(fen[len]);
                 len++;
 
@@ -322,6 +319,11 @@ extern int setup_board(Board_t self, const char *fen)
                 if (isdigit(fen[len])) len++; // ignore what it says
 
                 self->enPassantPawn = square(file, rank);
+        } else {
+                self->enPassantPawn = 0;
+                if (fen[len] == '-') {
+                        len++;
+                }
         }
 
         // Reset move stacks
