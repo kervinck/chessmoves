@@ -195,12 +195,44 @@ chessmovesmodule_position(PyObject *self, PyObject *args)
 }
 
 /*----------------------------------------------------------------------+
+ |      hash()                                                          |
+ +----------------------------------------------------------------------*/
+
+PyDoc_STRVAR(hash_doc,
+        "hash(fen) -> hash\n"
+        "\n"
+        "Compute the Zobrist-Polyglot hash for the position."
+);
+
+static PyObject *
+chessmovesmodule_hash(PyObject *self, PyObject *args)
+{
+        char *fen;
+
+        if (!PyArg_ParseTuple(args, "s", &fen)) {
+                return NULL;
+        }
+
+        struct board board;
+        int len = setup_board(&board, fen);
+        if (len <= 0) {
+                PyErr_SetString(PyExc_ValueError, "Invalid FEN");
+                return NULL;
+        }
+
+        unsigned long long hashkey = hash(&board);
+
+        return PyLong_FromUnsignedLongLong(hashkey);
+}
+
+/*----------------------------------------------------------------------+
  |      method table                                                    |
  +----------------------------------------------------------------------*/
 
 static PyMethodDef chessmovesMethods[] = {
 	{ "moves", (PyCFunction)chessmovesmodule_moves, METH_VARARGS|METH_KEYWORDS, moves_doc },
 	{ "position", chessmovesmodule_position, METH_VARARGS, position_doc },
+	{ "hash", chessmovesmodule_hash, METH_VARARGS, hash_doc },
 	{ NULL, }
 };
 

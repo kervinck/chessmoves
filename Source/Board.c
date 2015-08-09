@@ -26,6 +26,7 @@
  *  Other module includes
  */
 #include "stringCopy.h"
+#include "Polyglot.h"
 
 /*----------------------------------------------------------------------+
  |      Definitions                                                     |
@@ -228,6 +229,8 @@ static const unsigned char knightDirections[] = {
  |      Functions                                                       |
  +----------------------------------------------------------------------*/
 
+static void normalizeEnPassantStatus(Board_t self);
+
 /*----------------------------------------------------------------------+
  |      setup_board                                                     |
  +----------------------------------------------------------------------*/
@@ -331,6 +334,57 @@ extern int setup_board(Board_t self, const char *fen)
         self->undo_sp = self->undoStack;
 
         return len;
+}
+
+/*----------------------------------------------------------------------+
+ |      hash                                                            |
+ +----------------------------------------------------------------------*/
+
+unsigned long long hash(Board_t self)
+{
+        unsigned long long key = 0ULL;
+
+        static const int offsets[] = {
+                [blackPawn]   = 0 * 64, [whitePawn]   = 1 * 64,
+                [blackKnight] = 2 * 64, [whiteKnight] = 3 * 64,
+                [blackBishop] = 4 * 64, [whiteBishop] = 5 * 64,
+                [blackRook]   = 6 * 64, [whiteRook]   = 7 * 64,
+                [blackQueen]  = 8 * 64, [whiteQueen]  = 9 * 64,
+                [blackKing]   = 10 * 64, [whiteKing]  = 11 * 64,
+        };
+
+        // piece
+        for (int i=0; i<64; i++) {
+                int file = i & 7;
+                int rank = i >> 3;
+                int square = square(file, rank);
+                int piece = self->squares[square];
+                if (piece == empty) continue;
+                key ^= RandomPiece[offsets[piece] + i];
+        }
+
+        // castle
+        if (self->castleFlags & castleFlagWhiteKside) key ^= RandomCastle[0];
+        if (self->castleFlags & castleFlagWhiteQside) key ^= RandomCastle[1];
+        if (self->castleFlags & castleFlagBlackKside) key ^= RandomCastle[2];
+        if (self->castleFlags & castleFlagBlackQside) key ^= RandomCastle[3];
+
+        static const int files[] = {
+                [fileA] = 0, [fileB] = 1, [fileC] = 2, [fileD] = 3,
+                [fileE] = 4, [fileF] = 5, [fileG] = 6, [fileH] = 7,
+        };
+
+        // enpassant
+        normalizeEnPassantStatus(self);
+        int ep = self->enPassantPawn;
+        if (ep != 0) {
+                key ^= RandomEnPassant[files[file(ep)]];
+        }
+
+        // turn
+        if (sideToMove(self) == white) key ^= RandomTurn[0];
+
+        return key;
 }
 
 /*----------------------------------------------------------------------+
@@ -907,6 +961,7 @@ extern char *moveToLongAlgebraic(Board_t self, char *moveString, int move)
         *moveString = '\0';
         return moveString;
 }
+
 /*----------------------------------------------------------------------+
  |      convert a move to SAN output                                    |
  +----------------------------------------------------------------------*/

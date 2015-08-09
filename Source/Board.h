@@ -60,6 +60,7 @@ char *moveToLongAlgebraic(Board_t self, char *moveString, int move);
 char *moveToUci(Board_t self, char *moveString, int move);
 const char *getCheckMark(Board_t self);
 int parse_move(char *line, int *num);
+unsigned long long hash(Board_t self);
 
 /*----------------------------------------------------------------------+
  |                                                                      |

@@ -5,6 +5,7 @@ module1 = Extension(
         sources = [
                 'Source/chessmovesmodule.c',
                 'Source/Board.c',
+                'Source/Polyglot.c',
                 'Source/stringCopy.c'],
         extra_compile_args = ['-std=c99', '-pedantic']
 )
