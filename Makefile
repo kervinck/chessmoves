@@ -8,7 +8,7 @@ module:
 
 # command line tool
 chessmoves:
-	$(CC) $(CFLAGS) -o chessmoves Source/chessmoves.c Source/stringCopy.c Source/Board.c Source/readLine.c
+	$(CC) $(CFLAGS) -o chessmoves Source/chessmoves.c Source/stringCopy.c Source/Board.c Source/readLine.c Source/Polyglot.c
 
 test:
 	echo rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - | Tools/perft.sh 5
