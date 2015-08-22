@@ -138,15 +138,21 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
 
                 PyObject *key = PyString_FromString(moveString);
                 if (!key) {
+                        Py_DECREF(dict);
                         return NULL;
                 }
 
                 PyObject *value = PyString_FromString(newFen);
                 if (!value) {
+                        Py_DECREF(dict);
+                        Py_DECREF(key);
                         return NULL;
                 }
 
                 if (PyDict_SetItem(dict, key, value)) {
+                        Py_DECREF(dict);
+                        Py_DECREF(key);
+                        Py_DECREF(value);
                         return NULL;
                 }
 
@@ -267,6 +273,7 @@ initchessmoves(void)
 
         for (int i=0; i<nrNotations; i++) {
                 if (PyList_SetItem(list, i, PyString_FromString(notations[i]))) {
+                        Py_DECREF(list);
                         return;
                 }
         }
