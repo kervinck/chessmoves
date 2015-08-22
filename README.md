@@ -42,6 +42,11 @@ FUNCTIONS
          - Remove en passant target square if there is no such legal capture
          - Remove excess data beyond the FEN
 
+   hash(...)
+        hash(fen) -> hash
+
+        Compute the Zobrist-Polyglot hash for the position.
+
 DATA
     notations = ['uci', 'san', 'long']
     startPosition = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - ...
