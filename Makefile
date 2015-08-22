@@ -1,14 +1,10 @@
 CFLAGS=-std=c99 -pedantic -Wall -O3
 
-all: chessmoves module
+all: module
 
 # python module
 module:
 	python setup.py build
-
-# command line tool
-chessmoves:
-	$(CC) $(CFLAGS) -o chessmoves Source/chessmoves.c Source/stringCopy.c Source/Board.c Source/readLine.c Source/Polyglot.c
 
 test:
 	python Tools/quicktest.py
@@ -20,6 +16,5 @@ install:
 
 clean:
 	python setup.py clean
-	rm -f chessmoves
 
 # vi: noexpandtab

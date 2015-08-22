@@ -1,0 +1,27 @@
+- Cleanup: add descriptions to all functions in chessmoves.c
+
+- Make function call order dependencies easier to understand (= rethinking functions with old naming)
+
+- Cleanup: error handling
+
+- Consider profiling
+
+- Consider speedup with quick_makeMove in isLegalMove
+
+- Handle 6-field FEN, detect automatically
+
+- Accept sloppy FENs with incomplete data, for example "k///////K w"
+
+Release as 1.0b
+
+- Formalize module on python site
+
+Release as 1.0c
+
+- Cleanup: handle memory for stacks in a more elegant way
+
+- Add XFEN support
+
+- Add normalization options (w/b, x, y, xy)
+
+Release as 1.1b
