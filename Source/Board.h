@@ -31,6 +31,7 @@ struct board {
         struct side *side, *xside;
         struct side whiteSide;
         struct side blackSide;
+        int sideInfoPlyNumber; // for sanity checking
 
         /*
          *  Move undo administration
@@ -49,17 +50,17 @@ extern const char startpos[];
  |      Functions                                                       |
  +----------------------------------------------------------------------*/
 
-int setup_board(Board_t self, const char *fen);
+int setupBoard(Board_t self, const char *fen);
 void boardToFen(Board_t self, char *fen);
-void compute_side_info(Board_t self);
-void generate_moves(Board_t self);
+void computeSideInfo(Board_t self);
+void generateMoves(Board_t self);
 void makeMove(Board_t self, int move);
 void undoMove(Board_t self);
 char *moveToStandardAlgebraic(Board_t self, char *moveString, int move, short *xmoves, int xlen);
 char *moveToLongAlgebraic(Board_t self, char *moveString, int move);
 char *moveToUci(Board_t self, char *moveString, int move);
 const char *getCheckMark(Board_t self);
-int parse_move(char *line, int *num);
+//int parse_move(char *line, int *num);
 unsigned long long hash(Board_t self);
 
 /*----------------------------------------------------------------------+

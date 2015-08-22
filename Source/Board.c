@@ -10,6 +10,7 @@
 /*
  *  Standard includes
  */
+#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <stddef.h>
@@ -25,8 +26,8 @@
 /*
  *  Other module includes
  */
+#include "polyglot.h"
 #include "stringCopy.h"
-#include "Polyglot.h"
 
 /*----------------------------------------------------------------------+
  |      Definitions                                                     |
@@ -232,10 +233,10 @@ static const unsigned char knightDirections[] = {
 static void normalizeEnPassantStatus(Board_t self);
 
 /*----------------------------------------------------------------------+
- |      setup_board                                                     |
+ |      setupBoard                                                      |
  +----------------------------------------------------------------------*/
 
-extern int setup_board(Board_t self, const char *fen)
+extern int setupBoard(Board_t self, const char *fen)
 {
         int len = 0;
 
@@ -329,9 +330,12 @@ extern int setup_board(Board_t self, const char *fen)
                 }
         }
 
+        self->sideInfoPlyNumber = -1; // side info is invalid
+
         // Reset move stacks
         self->move_sp = self->moveStack;
         self->undo_sp = self->undoStack;
+
 
         return len;
 }
@@ -407,7 +411,7 @@ static void atk_slide(Board_t self, int from, int dirs, struct side *side)
         } while (dirs -= dir); // remove and go to next
 }
 
-extern void compute_side_info(Board_t self)
+extern void computeSideInfo(Board_t self)
 {
         memset(&self->whiteSide, 0, sizeof self->whiteSide);
         memset(&self->blackSide, 0, sizeof self->blackSide);
@@ -511,6 +515,8 @@ extern void compute_side_info(Board_t self)
                         break;
                 }
         }
+
+        self->sideInfoPlyNumber = self->plyNumber;
 }
 
 /*----------------------------------------------------------------------+
@@ -528,6 +534,10 @@ extern void undoMove(Board_t self)
         }
         self->undo_sp = sp;
         self->plyNumber--;
+
+        if (self->plyNumber < self->sideInfoPlyNumber) {
+                self->sideInfoPlyNumber = -1; // side info is invalid
+        }
 }
 
 extern void makeMove(Board_t self, int move)
@@ -692,7 +702,7 @@ static void generateSlides(Board_t self, int from, int dirs)
 static int isLegalMove(Board_t self, int move)
 {
         makeMove(self, move);
-        compute_side_info(self);
+        computeSideInfo(self);
         int legal = (self->side->attacks[self->xside->king] == 0);
         undoMove(self);
         return legal;
@@ -700,11 +710,15 @@ static int isLegalMove(Board_t self, int move)
 
 static int inCheck(Board_t self)
 {
+        assert(self->sideInfoPlyNumber == self->plyNumber);
+
         return self->xside->attacks[self->side->king] != 0;
 }
 
-extern void generate_moves(Board_t self)
+extern void generateMoves(Board_t self)
 {
+        assert(self->sideInfoPlyNumber == self->plyNumber);
+
         for (int from=0; from<boardSize; from++) {
                 int piece = self->squares[from];
                 if (piece == empty || pieceColor(piece) != sideToMove(self)) continue;
@@ -1047,8 +1061,8 @@ extern char *moveToStandardAlgebraic(Board_t self, char *moveString, int move, s
 
 /*
  *  Produce a checkmark ('+' or '#').
- *  The move must already be made and side_info computed.
- *  side_info might be invalid after this function.
+ *  The move must already be made and sideInfo computed.
+ *  sideInfo might be invalid after this function.
  */
 extern const char *getCheckMark(Board_t self)
 {
@@ -1057,7 +1071,7 @@ extern const char *getCheckMark(Board_t self)
         if (inCheck(self)) { // in check, but is it checkmate?
                 checkmark = "#";
                 short *start_moves = self->move_sp;
-                generate_moves(self);
+                generateMoves(self);
                 while (self->move_sp > start_moves) {
                         if (isLegalMove(self, *--self->move_sp)) {
                                 checkmark = "+";
@@ -1261,8 +1275,8 @@ extern int parse_move(char *line, int *num)
         matches = 0;
 
         m = move_sp;
-        compute_attacks();
-        generate_moves();
+        computeSideInfo();
+        generateMoves();
         while (move_sp > m) {
                 int fr, to;
 

@@ -1,7 +1,5 @@
 - Cleanup: add descriptions to all functions in chessmoves.c
 
-- Make function call order dependencies easier to understand (= rethinking functions with old naming)
-
 - Cleanup: error handling
 
 - Consider profiling

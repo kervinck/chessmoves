@@ -8,7 +8,7 @@ module:
 
 test:
 	python Tools/quicktest.py
-	echo rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - | Tools/perft.sh 5
+	echo rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - | time python Tools/perft.py 5
 	env PATH=.:Tools:$$PATH Tools/run-perft 4 < Data/perft-random.epd
 
 install:

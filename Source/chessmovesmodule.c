@@ -8,7 +8,6 @@
 #include <stdbool.h>
 
 #include "Board.h"
-
 #include "stringCopy.h"
 
 /*----------------------------------------------------------------------+
@@ -63,7 +62,7 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
         }
 
         struct board board;
-        int len = setup_board(&board, fen);
+        int len = setupBoard(&board, fen);
         if (len <= 0) {
                 PyErr_SetString(PyExc_ValueError, "Invalid FEN");
                 return NULL;
@@ -82,8 +81,8 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
         }
 
         short *start_moves = board.move_sp;
-        compute_side_info(&board);
-        generate_moves(&board);
+        computeSideInfo(&board);
+        generateMoves(&board);
 
         int nr_pmoves = board.move_sp - start_moves;
 
@@ -96,7 +95,7 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
                 int move = start_moves[i];
 
                 makeMove(&board, move);
-                compute_side_info(&board);
+                computeSideInfo(&board);
 
                 int isLegal = board.side->attacks[board.xside->king] == 0;
                 if (!isLegal) {
@@ -188,7 +187,7 @@ chessmovesmodule_position(PyObject *self, PyObject *args)
         }
 
         struct board board;
-        int len = setup_board(&board, fen);
+        int len = setupBoard(&board, fen);
         if (len <= 0) {
                 PyErr_SetString(PyExc_ValueError, "Invalid FEN");
                 return NULL;
@@ -220,7 +219,7 @@ chessmovesmodule_hash(PyObject *self, PyObject *args)
         }
 
         struct board board;
-        int len = setup_board(&board, fen);
+        int len = setupBoard(&board, fen);
         if (len <= 0) {
                 PyErr_SetString(PyExc_ValueError, "Invalid FEN");
                 return NULL;
