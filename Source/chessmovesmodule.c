@@ -1,19 +1,62 @@
 
 /*----------------------------------------------------------------------+
+ |                                                                      |
  |      chessmovesmodule.c                                              |
+ |                                                                      |
  +----------------------------------------------------------------------*/
 
+/*
+ *  Copyright (C) 2015, Marcel van Kervinck
+ *  All rights reserved
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
+ *  are met:
+ *
+ *  1. Redistributions of source code must retain the above copyright
+ *  notice, this list of conditions and the following disclaimer.
+ *
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *  notice, this list of conditions and the following disclaimer in the
+ *  documentation and/or other materials provided with the distribution.
+ *
+ *  3. Neither the name of the copyright holder nor the names of its
+ *  contributors may be used to endorse or promote products derived
+ *  from this software without specific prior written permission.
+ *
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *  COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ *  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ *  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ *  POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*----------------------------------------------------------------------+
+ |      Includes                                                        |
+ +----------------------------------------------------------------------*/
+
+// Python include (must come first)
 #include "Python.h"
 
+// Standard includes
 #include <stdbool.h>
 
+// Other module includes
 #include "Board.h"
 #include "stringCopy.h"
 
 /*----------------------------------------------------------------------+
- |      module                                                          |
+ |      Module                                                          |
  +----------------------------------------------------------------------*/
 
+// Module docstring
 PyDoc_STRVAR(chessmoves_doc,
         "Chess move and position generation (SAN/FEN/UCI).");
 
@@ -33,7 +76,7 @@ static char *notations[] = {
 };
 
 /*----------------------------------------------------------------------+
- |      moves()                                                         |
+ |      moves(...)                                                      |
  +----------------------------------------------------------------------*/
 
 PyDoc_STRVAR(moves_doc,
@@ -57,54 +100,45 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
 
         static char *keywordList[] = { "fen", "notation", NULL };
 
-        if (!PyArg_ParseTupleAndKeywords(args, keywords, "s|s:moves", keywordList, &fen, &notation)) {
+        if (!PyArg_ParseTupleAndKeywords(args, keywords, "s|s:moves", keywordList,
+                                         &fen, &notation))
                 return NULL;
-        }
 
         struct board board;
         int len = setupBoard(&board, fen);
-        if (len <= 0) {
-                PyErr_SetString(PyExc_ValueError, "Invalid FEN");
-                return NULL;
-        }
+        if (len <= 0)
+                return PyErr_Format(PyExc_ValueError, "Invalid FEN");
 
         int notationIndex;
-        for (notationIndex=0; notationIndex<nrNotations; notationIndex++) {
-                if (0==strcmp(notations[notationIndex], notation)) {
+        for (notationIndex=0; notationIndex<nrNotations; notationIndex++)
+                if (0==strcmp(notations[notationIndex], notation))
                         break; // found
-                }
-        }
 
-        if (notationIndex >= nrNotations) { // not found
-                PyErr_SetString(PyExc_ValueError, "Invalid notation");
-                return NULL;
-        }
+        if (notationIndex >= nrNotations) // not found
+                return PyErr_Format(PyExc_ValueError, "Invalid notation");
 
-        short *start_moves = board.move_sp;
-        computeSideInfo(&board);
-        generateMoves(&board);
-
-        int nr_pmoves = board.move_sp - start_moves;
+        int moveList[maxMoves];
+        updateSideInfo(&board);
+        int nrMoves = generateMoves(&board, moveList);
 
         PyObject *dict = PyDict_New();
-        if (!dict) {
+        if (!dict)
                 return NULL;
-        }
 
-        for (int i=0; i<nr_pmoves; i++) {
-                int move = start_moves[i];
+        for (int i=0; i<nrMoves; i++) {
+                int move = moveList[i];
 
                 makeMove(&board, move);
-                computeSideInfo(&board);
 
-                int isLegal = board.side->attacks[board.xside->king] == 0;
+                updateSideInfo(&board);
+                bool isLegal = board.side->attacks[board.xside->king] == 0;
                 if (!isLegal) {
                         undoMove(&board);
                         continue;
                 }
 
                 // key is move
-                char moveString[16];
+                char moveString[maxMoveLen];
                 char *s = moveString;
                 const char *checkmark;
 
@@ -121,7 +155,7 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
                         checkmark = getCheckMark(&board);
                         boardToFen(&board, newFen);
                         undoMove(&board);
-                        s = moveToStandardAlgebraic(&board, s, move, start_moves, nr_pmoves);
+                        s = moveToStandardAlgebraic(&board, s, move, moveList, nrMoves);
                         s = stringCopy(s, checkmark);
                         break;
                 case longNotation:
@@ -163,7 +197,7 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
 }
 
 /*----------------------------------------------------------------------+
- |      position()                                                      |
+ |      position(...)                                                   |
  +----------------------------------------------------------------------*/
 
 PyDoc_STRVAR(position_doc,
@@ -182,16 +216,13 @@ chessmovesmodule_position(PyObject *self, PyObject *args)
 {
         char *fen;
 
-        if (!PyArg_ParseTuple(args, "s", &fen)) {
+        if (!PyArg_ParseTuple(args, "s", &fen))
                 return NULL;
-        }
 
         struct board board;
         int len = setupBoard(&board, fen);
-        if (len <= 0) {
-                PyErr_SetString(PyExc_ValueError, "Invalid FEN");
-                return NULL;
-        }
+        if (len <= 0)
+                return PyErr_Format(PyExc_ValueError, "Invalid FEN (%s)", fen);
 
         char newFen[128];
         boardToFen(&board, newFen);
@@ -200,7 +231,88 @@ chessmovesmodule_position(PyObject *self, PyObject *args)
 }
 
 /*----------------------------------------------------------------------+
- |      hash()                                                          |
+ |      move(...)                                                       |
+ +----------------------------------------------------------------------*/
+
+PyDoc_STRVAR(move_doc,
+        "move(fen, move, notation='san') -> move\n"
+        "\n"
+        "Parse a move and normalize if it is legal.\n"
+);
+
+static PyObject *
+chessmovesmodule_move(PyObject *self, PyObject *args, PyObject *keywords)
+{
+        char *fen;
+        char *moveString;
+        char *notation = "san"; // default
+        int len;
+
+        static char *keywordList[] = { "fen", "move", "notation", NULL };
+
+        if (!PyArg_ParseTupleAndKeywords(args, keywords, "ss|s:move", keywordList,
+                                         &fen, &moveString, &notation))
+                return NULL;
+
+        struct board board;
+        len = setupBoard(&board, fen);
+        if (len <= 0)
+                return PyErr_Format(PyExc_ValueError, "Invalid FEN (%s)", fen);
+
+        int notationIndex;
+        for (notationIndex=0; notationIndex<nrNotations; notationIndex++)
+                if (0==strcmp(notations[notationIndex], notation))
+                        break; // found
+
+        if (notationIndex >= nrNotations) // not found
+                return PyErr_Format(PyExc_ValueError, "Invalid notation (%s)", notation);
+
+        int moveList[maxMoves];
+        updateSideInfo(&board);
+        int nrMoves = generateMoves(&board, moveList);
+
+        int move;
+        len = parseMove(&board, moveString, moveList, nrMoves, &move);
+        if (len == 0)
+                return PyErr_Format(PyExc_ValueError, "Invalid move syntax (%s)", moveString);
+        if (len == -1)
+                return PyErr_Format(PyExc_ValueError, "Illegal move (%s)", moveString);
+        if (len == -2)
+                return PyErr_Format(PyExc_ValueError, "Ambiguous move (%s)", moveString);
+
+        char newMoveString[maxMoveLen];
+        char *s = newMoveString;
+        const char *checkmark;
+
+        switch (notationIndex) {
+        case uciNotation:
+                s = moveToUci(&board, s, move);
+                break;
+        case sanNotation:
+                makeMove(&board, move);
+                updateSideInfo(&board);
+                checkmark = getCheckMark(&board);
+                undoMove(&board);
+                s = moveToStandardAlgebraic(&board, s, move, moveList, nrMoves);
+                s = stringCopy(s, checkmark);
+                break;
+        case longNotation:
+                makeMove(&board, move);
+                updateSideInfo(&board);
+                checkmark = getCheckMark(&board);
+                undoMove(&board);
+                s = moveToLongAlgebraic(&board, s, move);
+                s = stringCopy(s, checkmark);
+                break;
+        default:
+                assert(0);
+        }
+
+        return PyString_FromString(newMoveString);
+}
+
+/*----------------------------------------------------------------------+
+ |      hash(...)                                                       |
  +----------------------------------------------------------------------*/
 
 PyDoc_STRVAR(hash_doc,
@@ -221,23 +333,23 @@ chessmovesmodule_hash(PyObject *self, PyObject *args)
         struct board board;
         int len = setupBoard(&board, fen);
         if (len <= 0) {
-                PyErr_SetString(PyExc_ValueError, "Invalid FEN");
-                return NULL;
+                return PyErr_Format(PyExc_ValueError, "Invalid FEN");
         }
 
-        unsigned long long hashkey = hash(&board);
+        unsigned long long hashkey = hash64(&board);
 
         return PyLong_FromUnsignedLongLong(hashkey);
 }
 
 /*----------------------------------------------------------------------+
- |      method table                                                    |
+ |      Method table                                                    |
  +----------------------------------------------------------------------*/
 
 static PyMethodDef chessmovesMethods[] = {
-	{ "moves", (PyCFunction)chessmovesmodule_moves, METH_VARARGS|METH_KEYWORDS, moves_doc },
-	{ "position", chessmovesmodule_position, METH_VARARGS, position_doc },
-	{ "hash", chessmovesmodule_hash, METH_VARARGS, hash_doc },
+	{ "moves",    (PyCFunction)chessmovesmodule_moves, METH_VARARGS|METH_KEYWORDS, moves_doc },
+	{ "position", chessmovesmodule_position,           METH_VARARGS,               position_doc },
+	{ "hash",     chessmovesmodule_hash,               METH_VARARGS,               hash_doc },
+	{ "move",     (PyCFunction)chessmovesmodule_move,  METH_VARARGS|METH_KEYWORDS, move_doc },
 	{ NULL, }
 };
 

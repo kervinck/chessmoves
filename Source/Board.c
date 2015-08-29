@@ -1,7 +1,42 @@
 
 /*----------------------------------------------------------------------+
+ |                                                                      |
  |      Board.c                                                         |
+ |                                                                      |
  +----------------------------------------------------------------------*/
+
+/*
+ *  Copyright (C) 1998-2015, Marcel van Kervinck
+ *  All rights reserved
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
+ *  are met:
+ *
+ *  1. Redistributions of source code must retain the above copyright
+ *  notice, this list of conditions and the following disclaimer.
+ *
+ *  2. Redistributions in binary form must reproduce the above copyright
+ *  notice, this list of conditions and the following disclaimer in the
+ *  documentation and/or other materials provided with the distribution.
+ *
+ *  3. Neither the name of the copyright holder nor the names of its
+ *  contributors may be used to endorse or promote products derived
+ *  from this software without specific prior written permission.
+ *
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *  COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ *  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ *  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ *  POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*----------------------------------------------------------------------+
  |      Includes                                                        |
@@ -12,10 +47,8 @@
  */
 #include <assert.h>
 #include <ctype.h>
-#include <errno.h>
+#include <stdbool.h>
 #include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 /*
@@ -132,10 +165,11 @@ enum castleFlag {
 const char startpos[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 static const char pieceToChar[] = {
+        [empty] = '\0',
         [whiteKing]   = 'K', [whiteQueen]  = 'Q', [whiteRook] = 'R',
         [whiteBishop] = 'B', [whiteKnight] = 'N', [whitePawn] = 'P',
         [blackKing]   = 'k', [blackQueen]  = 'q', [blackRook] = 'r',
-        [blackBishop] = 'b', [blackKnight] = 'n', [blackPawn] = 'p'
+        [blackBishop] = 'b', [blackKnight] = 'n', [blackPawn] = 'p',
 };
 
 static const char promotionPieceToChar[] = { 'Q', 'R', 'B', 'N' };
@@ -231,6 +265,7 @@ static const unsigned char knightDirections[] = {
  +----------------------------------------------------------------------*/
 
 static void normalizeEnPassantStatus(Board_t self);
+static bool isPromotion(Board_t self, int from, int to);
 
 /*----------------------------------------------------------------------+
  |      setupBoard                                                      |
@@ -330,21 +365,21 @@ extern int setupBoard(Board_t self, const char *fen)
                 }
         }
 
-        self->sideInfoPlyNumber = -1; // side info is invalid
+#ifndef NDEBUG
+        self->debugSideInfoPlyNumber = -1; // side info is invalid
+#endif
 
-        // Reset move stacks
-        self->move_sp = self->moveStack;
-        self->undo_sp = self->undoStack;
-
+        // Reset the undo stack
+        self->undoLen = 0;
 
         return len;
 }
 
 /*----------------------------------------------------------------------+
- |      hash                                                            |
+ |      hash64                                                          |
  +----------------------------------------------------------------------*/
 
-unsigned long long hash(Board_t self)
+unsigned long long hash64(Board_t self)
 {
         unsigned long long key = 0ULL;
 
@@ -395,7 +430,7 @@ unsigned long long hash(Board_t self)
  |      attack tables                                                   |
  +----------------------------------------------------------------------*/
 
-static void atk_slide(Board_t self, int from, int dirs, struct side *side)
+static void updateSliderAttacks(Board_t self, int from, int dirs, struct side *side)
 {
         dirs &= kingDirections[from];
         int dir = 0;
@@ -411,7 +446,7 @@ static void atk_slide(Board_t self, int from, int dirs, struct side *side)
         } while (dirs -= dir); // remove and go to next
 }
 
-extern void computeSideInfo(Board_t self)
+extern void updateSideInfo(Board_t self)
 {
         memset(&self->whiteSide, 0, sizeof self->whiteSide);
         memset(&self->blackSide, 0, sizeof self->blackSide);
@@ -451,27 +486,27 @@ extern void computeSideInfo(Board_t self)
                         break;
 
                 case whiteQueen:
-                        atk_slide(self, from, dirsQueen, &self->whiteSide);
+                        updateSliderAttacks(self, from, dirsQueen, &self->whiteSide);
                         break;
 
                 case blackQueen:
-                        atk_slide(self, from, dirsQueen, &self->blackSide);
+                        updateSliderAttacks(self, from, dirsQueen, &self->blackSide);
                         break;
 
                 case whiteRook:
-                        atk_slide(self, from, dirsRook, &self->whiteSide);
+                        updateSliderAttacks(self, from, dirsRook, &self->whiteSide);
                         break;
 
                 case blackRook:
-                        atk_slide(self, from, dirsRook, &self->blackSide);
+                        updateSliderAttacks(self, from, dirsRook, &self->blackSide);
                         break;
 
                 case whiteBishop:
-                        atk_slide(self, from, dirsBishop, &self->whiteSide);
+                        updateSliderAttacks(self, from, dirsBishop, &self->whiteSide);
                         break;
 
                 case blackBishop:
-                        atk_slide(self, from, dirsBishop, &self->blackSide);
+                        updateSliderAttacks(self, from, dirsBishop, &self->blackSide);
                         break;
 
                 case whiteKnight:
@@ -516,7 +551,9 @@ extern void computeSideInfo(Board_t self)
                 }
         }
 
-        self->sideInfoPlyNumber = self->plyNumber;
+#ifndef NDEBUG
+        self->debugSideInfoPlyNumber = self->plyNumber;
+#endif
 }
 
 /*----------------------------------------------------------------------+
@@ -526,23 +563,26 @@ extern void computeSideInfo(Board_t self)
 extern void undoMove(Board_t self)
 {
         signed char *bytes = (signed char *)self;
-        signed char *sp = self->undo_sp;
+        int len = self->undoLen;
+        assert(len > 0);
         for (;;) {
-                int offset = *--sp;
-                if (offset < 0) break;          // Found sentinel
-                bytes[offset] = *--sp;
+                int offset = self->undoStack[--len];
+                if (offset < 0) break; // Found sentinel
+                bytes[offset] = self->undoStack[--len];
         }
-        self->undo_sp = sp;
+        self->undoLen = len;
         self->plyNumber--;
 
-        if (self->plyNumber < self->sideInfoPlyNumber) {
-                self->sideInfoPlyNumber = -1; // side info is invalid
+#ifndef NDEBUG
+        if (self->plyNumber < self->debugSideInfoPlyNumber) {
+                self->debugSideInfoPlyNumber = -1; // side info is invalid
         }
+#endif
 }
 
 extern void makeMove(Board_t self, int move)
 {
-        signed char *sp = self->undo_sp;
+        signed char *sp = &self->undoStack[self->undoLen];
 
         #define push(offset, value) do{                         \
                 *sp++ = (value);                                \
@@ -641,7 +681,7 @@ extern void makeMove(Board_t self, int move)
                 self->castleFlags &= ~flagsToClear;
         }
 
-        self->undo_sp = sp;
+        self->undoLen = sp - self->undoStack;
 }
 
 /*----------------------------------------------------------------------+
@@ -650,28 +690,28 @@ extern void makeMove(Board_t self, int move)
 
 static void pushMove(Board_t self, int from, int to)
 {
-        *self->move_sp++ = move(from, to);
+        *self->movePtr++ = move(from, to);
 }
 
 static void pushSpecialMove(Board_t self, int from, int to)
 {
-        *self->move_sp++ = specialMove(from, to);
+        *self->movePtr++ = specialMove(from, to);
 }
 
 static void pushPawnMove(Board_t self, int from, int to)
 {
         if (rank(to) == rank8 || rank(to) == rank1) {
                 pushSpecialMove(self, from, to);
-                self->move_sp[-1] += queenPromotionFlags;
+                self->movePtr[-1] += queenPromotionFlags;
 
                 pushSpecialMove(self, from, to);
-                self->move_sp[-1] += rookPromotionFlags;
+                self->movePtr[-1] += rookPromotionFlags;
 
                 pushSpecialMove(self, from, to);
-                self->move_sp[-1] += bishopPromotionFlags;
+                self->movePtr[-1] += bishopPromotionFlags;
 
                 pushSpecialMove(self, from, to);
-                self->move_sp[-1] += knightPromotionFlags;
+                self->movePtr[-1] += knightPromotionFlags;
         } else {
                 pushMove(self, from, to); // normal pawn move
         }
@@ -699,25 +739,26 @@ static void generateSlides(Board_t self, int from, int dirs)
         } while (dirs -= dir); // remove and go to next
 }
 
-static int isLegalMove(Board_t self, int move)
+static bool isLegalMove(Board_t self, int move)
 {
         makeMove(self, move);
-        computeSideInfo(self);
-        int legal = (self->side->attacks[self->xside->king] == 0);
+        updateSideInfo(self);
+        bool isLegal = (self->side->attacks[self->xside->king] == 0);
         undoMove(self);
-        return legal;
+        return isLegal;
 }
 
 static int inCheck(Board_t self)
 {
-        assert(self->sideInfoPlyNumber == self->plyNumber);
-
+        assert(self->debugSideInfoPlyNumber == self->plyNumber);
         return self->xside->attacks[self->side->king] != 0;
 }
 
-extern void generateMoves(Board_t self)
+extern int generateMoves(Board_t self, int moveList[maxMoves])
 {
-        assert(self->sideInfoPlyNumber == self->plyNumber);
+        assert(self->debugSideInfoPlyNumber == self->plyNumber);
+
+        self->movePtr = moveList;
 
         for (int from=0; from<boardSize; from++) {
                 int piece = self->squares[from];
@@ -741,6 +782,7 @@ extern void generateMoves(Board_t self)
                                 to = from + kingStep[dir];
                                 if (self->squares[to] != empty
                                  && pieceColor(self->squares[to]) == sideToMove(self)) continue;
+                                if (self->xside->attacks[to] != 0) continue;
                                 pushMove(self, from, to);
                         } while (dirs -= dir); // remove and go to next
                         break;
@@ -779,13 +821,15 @@ extern void generateMoves(Board_t self)
                 case whitePawn:
                         if (file(from) != fileH) {
                                 to = from + stepNE;
-                                if (self->squares[to] >= blackKing) {
+                                if (self->squares[to] != empty
+                                 && pieceColor(self->squares[to]) == black) {
                                         pushPawnMove(self, from, to);
                                 }
                         }
                         if (file(from) != fileA) {
                                 to = from + stepNW;
-                                if (self->squares[to] >= blackKing) {
+                                if (self->squares[to] != empty
+                                 && pieceColor(self->squares[to]) == black) {
                                         pushPawnMove(self, from, to);
                                 }
                         }
@@ -799,7 +843,7 @@ extern void generateMoves(Board_t self)
                                 if (self->squares[to] == empty) {
                                         pushMove(self, from, to);
                                         if (self->blackSide.attacks[to+stepS]) {
-                                                self->move_sp[-1] |= specialMoveFlag;
+                                                self->movePtr[-1] |= specialMoveFlag;
                                         }
                                 }
                         }
@@ -808,13 +852,15 @@ extern void generateMoves(Board_t self)
                 case blackPawn:
                         if (file(from) != fileH) {
                                 to = from + stepSE;
-                                if (self->squares[to] && self->squares[to] < blackKing) {
+                                if (self->squares[to] != empty
+                                 && pieceColor(self->squares[to]) == white) {
                                         pushPawnMove(self, from, to);
                                 }
                         }
                         if (file(from) != fileA) {
                                 to = from + stepSW;
-                                if (self->squares[to] && self->squares[to] < blackKing) {
+                                if (self->squares[to] != empty
+                                 && pieceColor(self->squares[to]) == white) {
                                         pushPawnMove(self, from, to);
                                 }
                         }
@@ -828,7 +874,7 @@ extern void generateMoves(Board_t self)
                                 if (self->squares[to] == empty) {
                                         pushMove(self, from, to);
                                         if (self->whiteSide.attacks[to+stepN]) {
-                                                self->move_sp[-1] |= specialMoveFlag;
+                                                self->movePtr[-1] |= specialMoveFlag;
                                         }
                                 }
                         }
@@ -844,7 +890,8 @@ extern void generateMoves(Board_t self)
                         if ((self->castleFlags & castleFlagWhiteKside)
                          && self->squares[f1] == empty
                          && self->squares[g1] == empty
-                         && !self->xside->attacks[f1]
+                         && self->xside->attacks[f1] == 0
+                         && self->xside->attacks[g1] == 0
                         ) {
                                 pushSpecialMove(self, e1, g1);
                         }
@@ -852,7 +899,8 @@ extern void generateMoves(Board_t self)
                          && self->squares[d1] == empty
                          && self->squares[c1] == empty
                          && self->squares[b1] == empty
-                         && !self->xside->attacks[d1]
+                         && self->xside->attacks[d1] == 0
+                         && self->xside->attacks[c1] == 0
                         ) {
                                 pushSpecialMove(self, e1, c1);
                         }
@@ -860,7 +908,8 @@ extern void generateMoves(Board_t self)
                         if ((self->castleFlags & castleFlagBlackKside)
                          && self->squares[f8] == empty
                          && self->squares[g8] == empty
-                         && !self->xside->attacks[f8]
+                         && self->xside->attacks[f8] == 0
+                         && self->xside->attacks[g8] == 0
                         ) {
                                 pushSpecialMove(self, e8, g8);
                         }
@@ -868,7 +917,8 @@ extern void generateMoves(Board_t self)
                          && self->squares[d8] == empty
                          && self->squares[c8] == empty
                          && self->squares[b8] == empty
-                         && !self->xside->attacks[d8]
+                         && self->xside->attacks[d8] == 0
+                         && self->xside->attacks[c8] == 0
                         ) {
                                 pushSpecialMove(self, e8, c8);
                         }
@@ -897,10 +947,12 @@ extern void generateMoves(Board_t self)
                         }
                 }
         }
+
+        return self->movePtr - moveList; // nrMoves
 }
 
 /*----------------------------------------------------------------------+
- |      convert a move to UCI output                                    |
+ |      Convert a move to UCI output                                    |
  +----------------------------------------------------------------------*/
 
 /*
@@ -916,19 +968,15 @@ extern char *moveToUci(Board_t self, char *moveString, int move)
         *moveString++ = rankToChar(rank(from));
         *moveString++ = fileToChar(file(to));
         *moveString++ = rankToChar(rank(to));
-
-        if ((self->squares[from] == whitePawn && rank(to)==rank8)
-         || (self->squares[from] == blackPawn && rank(to)==rank1)
-        ) {
+        if (isPromotion(self, from, to))
                 *moveString++ = tolower(promotionPieceToChar[move>>promotionBits]);
-        }
         *moveString = '\0';
 
         return moveString;
 }
 
 /*----------------------------------------------------------------------+
- |      convert a move to long algebraic notation                       |
+ |      Convert a move to long algebraic notation                       |
  +----------------------------------------------------------------------*/
 
 /*
@@ -965,9 +1013,7 @@ extern char *moveToLongAlgebraic(Board_t self, char *moveString, int move)
         *moveString++ = rankToChar(rank(to));
 
         // Promotion piece
-        if ((self->squares[from] == whitePawn && rank(to) == rank8)
-         || (self->squares[from] == blackPawn && rank(to) == rank1)
-        ) {
+        if (isPromotion(self, from, to)) {
                 *moveString++ = '=';
                 *moveString++ = promotionPieceToChar[move>>promotionBits];
         }
@@ -977,13 +1023,13 @@ extern char *moveToLongAlgebraic(Board_t self, char *moveString, int move)
 }
 
 /*----------------------------------------------------------------------+
- |      convert a move to SAN output                                    |
+ |      Convert a move to SAN output                                    |
  +----------------------------------------------------------------------*/
 
 /*
  *  Convert into SAN notation, but without any checkmark
  */
-extern char *moveToStandardAlgebraic(Board_t self, char *moveString, int move, short *xmoves, int xlen)
+extern char *moveToStandardAlgebraic(Board_t self, char *moveString, int move, int *xMoves, int xlen)
 {
         int from = from(move);
         int to   = to(move);
@@ -1009,7 +1055,7 @@ extern char *moveToStandardAlgebraic(Board_t self, char *moveString, int move, s
                 /*
                  *  Promote to piece (=Q, =R, =B, =N)
                  */
-                if (rank(to)==rank1 || rank(to)==rank8) {
+                if (isPromotion(self, from, to)) {
                         *moveString++ = '=';
                         *moveString++ = promotionPieceToChar[move>>promotionBits];
                 }
@@ -1027,14 +1073,14 @@ extern char *moveToStandardAlgebraic(Board_t self, char *moveString, int move, s
          */
         int filex = 0, rankx = 0;
         for (int i=0; i<xlen; i++) {
-                int xmove = xmoves[i];
-                if (to == to(xmove)                     // Must have same destination
-                 && move != xmove                       // Different move
-                 && self->squares[from] == self->squares[from(xmove)] // Same piece type
-                 && isLegalMove(self, xmove)            // And also legal
+                int xMove = xMoves[i];
+                if (to == to(xMove)                     // Must have same destination
+                 && move != xMove                       // Different move
+                 && self->squares[from] == self->squares[from(xMove)] // Same piece type
+                 && isLegalMove(self, xMove)            // And also legal
                 ) {
-                        rankx |= (rank(from) == rank(from(xmove))) + 1; // Tricky but correct
-                        filex |=  file(from) == file(from(xmove));
+                        rankx |= (rank(from) == rank(from(xMove))) + 1; // Tricky but correct
+                        filex |=  file(from) == file(from(xMove));
                 }
         }
         if (rankx != filex) *moveString++ = fileToChar(file(from)); // Skip if both are 0 or 1
@@ -1070,49 +1116,17 @@ extern const char *getCheckMark(Board_t self)
 
         if (inCheck(self)) { // in check, but is it checkmate?
                 checkmark = "#";
-                short *start_moves = self->move_sp;
-                generateMoves(self);
-                while (self->move_sp > start_moves) {
-                        if (isLegalMove(self, *--self->move_sp)) {
+                int moveList[maxMoves];
+                int nrMoves = generateMoves(self, moveList);
+                for (int i=0; i<nrMoves; i++) {
+                        if (isLegalMove(self, moveList[i])) {
                                 checkmark = "+";
-                                self->move_sp = start_moves; // breaks the loop
+                                break;
                         }
                 }
         }
 
         return checkmark;
-}
-
-/*----------------------------------------------------------------------+
- |      helper to normalize the enPassantPawn field                     |
- +----------------------------------------------------------------------*/
-
-static void normalizeEnPassantStatus(Board_t self)
-{
-        int square = self->enPassantPawn;
-        if (!square) return;
-
-        if (sideToMove(self) == white) {
-                if (file(square) != fileA && self->squares[square+stepW] == whitePawn) {
-                        int move = specialMove(square + stepW, square + stepN);
-                        if (isLegalMove(self, move)) return;
-                }
-                if (file(square) != fileH && self->squares[square+stepE] == whitePawn) {
-                        int move = specialMove(square + stepE, square + stepN);
-                        if (isLegalMove(self, move)) return;
-                }
-        } else {
-                if (file(square) != fileA && self->squares[square+stepW] == blackPawn) {
-                        int move = specialMove(square + stepW, square + stepS);
-                        if (isLegalMove(self, move)) return;
-                }
-                if (file(square) != fileH && self->squares[square+stepE] == blackPawn) {
-                        int move = specialMove(square + stepE, square + stepS);
-                        if (isLegalMove(self, move)) return;
-                }
-        }
-
-        self->enPassantPawn = 0; // Clear en passant flag if there is no such legal capture
 }
 
 /*----------------------------------------------------------------------+
@@ -1174,6 +1188,14 @@ extern void boardToFen(Board_t self, char *fen)
                 *fen++ = '-';
         }
 
+        /*
+         *  Move number
+         */
+
+        /*
+         *  Halfmove clock
+         */
+
         *fen = '\0';
 }
 
@@ -1181,165 +1203,231 @@ extern void boardToFen(Board_t self, char *fen)
  |      move parser                                                     |
  +----------------------------------------------------------------------*/
 
-#if 0
-extern int parse_move(char *line, int *num)
+/*
+ *  Accept: "O-O" "O-O-O" "o-o" "0-0" "OO" "000" etc
+ *  Reject: "OO-O" "O--O" "o-O" "o0O" etc
+ */
+static int parseCastling(const char *line, int *len)
 {
-        int                     move, matches;
-        int                     n = 0;
-        short                   *m;
-        char                    *piece = NULL;
-        char                    *fr_file = NULL;
-        char                    *fr_rank = NULL;
-        char                    *to_file = NULL;
-        char                    *to_rank = NULL;
-        char                    *prom_piece = NULL;
-        char                    *s;
-
-        while (isspace(line[n]))      /* skip white space */
-                n++;
-
-        if (!strncmp(line+n, "o-o-o", 5)
-        ||  !strncmp(line+n, "O-O-O", 5)
-        ||  !strncmp(line+n, "0-0-0", 5)) {
-                piece = "K"; fr_file = "e"; to_file = "c";
-                n+=5;
+        int nrOh = 0;
+        int ix = 0;
+        int oh = line[ix];
+        if (oh == 'O' || oh == 'o' || oh == '0') {
+                do {
+                        nrOh++;
+                        if (line[++ix] == '-')  ix++;
+                } while (line[ix] == oh);
         }
-        else if (!strncmp(line+n, "o-o", 3)
-        ||  !strncmp(line+n, "O-O", 3)
-        ||  !strncmp(line+n, "0-0", 3)) {
-                piece = "K"; fr_file = "e"; to_file = "g";
-                n+=3;
+        if (ix != nrOh && ix != 2 * nrOh - 1) { // still looks malformed
+                nrOh = 0;
+                ix = 0;
         }
-        else {
-                s = strchr("KQRBNP", line[n]);
-
-                if (s && *s) {
-                        piece = s;
-                        n++;
-                }
-
-                /* first square */
-
-                s = strchr("abcdefgh", line[n]);
-                if (s && *s) {
-                        to_file = s;
-                        n++;
-                }
-
-                s = strchr("12345678", line[n]);
-                if (s && *s) {
-                        to_rank = s;
-                        n++;
-                }
-
-                if (line[n] == '-' || line[n] == 'x') {
-                        n++;
-                }
-
-                s = strchr("abcdefgh", line[n]);
-                if (s && *s) {
-                        fr_file = to_file;
-                        fr_rank = to_rank;
-                        to_file = s;
-                        to_rank = NULL;
-                        n++;
-                }
-
-                s = strchr("12345678", line[n]);
-                if (s && *s) {
-                        to_rank = s;
-                        n++;
-                }
-
-                if (line[n] == '=') {
-                        n++;
-                }
-                s = strchr("QRBNqrbn", line[n]);
-                if (s && *s) {
-                        prom_piece = s;
-                        n++;
-                }
-        }
-
-        while (line[n] == '+' || line[n] == '#'
-        || line[n] == '!' || line[n] == '?') {
-                n++;
-        }
-
-        *num = n;
-        if (!piece && !fr_file && !fr_rank
-        && !to_file && !to_rank && !prom_piece)
-                return 0;
-
-        move = 0;
-        matches = 0;
-
-        m = move_sp;
-        computeSideInfo();
-        generateMoves();
-        while (move_sp > m) {
-                int fr, to;
-
-                move_sp--;
-
-                fr = FR(*move_sp);
-                to = TO(*move_sp);
-
-                /* does this move match? */
-
-                if ((piece && *piece != toupper(PIECE2CHAR(board[fr])))
-                 || (to_file && *to_file != FILE2CHAR(F(to)))
-                 || (to_rank && *to_rank != RANK2CHAR(R(to)))
-                 || (fr_file && *fr_file != FILE2CHAR(F(fr)))
-                 || (fr_rank && *fr_rank != RANK2CHAR(R(fr)))
-                 || (prom_piece &&
-                        (toupper(*prom_piece) != "QRBN"[(*move_sp)>>13])))
-                {
-                        continue;
-                }
-
-                /* if so, is it legal? */
-                if (test_illegal(*move_sp)) {
-                        continue;
-                }
-                /* probably.. */
-
-                /* do we already have a match? */
-                if (move) {
-                        int old_is_p, new_is_p;
-
-                        if (piece) {
-                                move_sp = m;
-                                return 0;
-                        }
-                        /* if this move is a pawn move and the previously
-                           found isn't, we accept it */
-                        old_is_p = (board[FR(move)]==WHITE_PAWN) ||
-                                (board[FR(move)]==BLACK_PAWN);
-                        new_is_p = (board[fr]==WHITE_PAWN) ||
-                                (board[fr]==BLACK_PAWN);
-
-                        if (new_is_p && !old_is_p) {
-                                move = *move_sp;
-                                matches = 1;
-                        } else if (old_is_p && !new_is_p) {
-                        } else if (!old_is_p && !new_is_p)  {
-                                matches++;
-                        } else if (old_is_p && new_is_p)  {
-                                move_sp = m;
-                                return 0;
-                        }
-                } else {
-                        move = *move_sp;
-                        matches = 1;
-                }
-        }
-        if (matches <= 1)
-                return move;
-
-        return 0;
+        *len = ix;
+        return nrOh;
 }
-#endif
+
+static bool isPieceChar(int c)
+{
+        const char *s = strchr("KQRBNP", c);
+        return s != NULL && *s != '\0';
+}
+
+extern int parseMove(Board_t self, const char *line, int xmoves[maxMoves], int xlen, int *move)
+{
+        /*
+         *  Phase 1: extract as many as possible move elements from input
+         */
+
+        int ix = 0; // index into line[]
+
+        /*
+         *  The line elements for move disambiguation
+         *  Capture and checkmarks will be swallowed and are not checked
+         *  for correctness either
+         */
+        char fromPiece = 0;
+        char fromFile = 0;
+        char fromRank = 0;
+        char toPiece = 0;
+        char toFile = 0;
+        char toRank = 0;
+        char promotionPiece = 0;
+
+        while (isspace(line[ix]))       // Skip white spaces
+                ix++;
+
+        int castleLen;
+        int nrOh = parseCastling(&line[ix], &castleLen);
+
+        if (nrOh == 2) {                // King side castling
+                fromPiece = 'K';
+                fromFile = 'e';
+                toFile = 'g';
+                ix += castleLen;
+        } else if (nrOh == 3) {         // Queen side castling
+                fromPiece = 'K';
+                fromFile = 'e';
+                toFile = 'c';
+                ix += castleLen;
+        } else {                        // Regular move
+                if (isPieceChar(line[ix]))
+                        fromPiece = line[ix++];
+
+                if ('a' <= line[ix] && line[ix] <= 'h')
+                        toFile = line[ix++];
+
+                if ('1' <= line[ix] && line[ix] <= '8')
+                        toRank = line[ix++];
+
+                switch (line[ix]) {
+                case 'x': case ':':
+                        if (isPieceChar(line[++ix]))
+                                toPiece = line[ix++];
+                        break;
+                case '-':
+                        ix++;
+                }
+
+                if ('a' <= line[ix] && line[ix] <= 'h') {
+                        fromFile = toFile;
+                        fromRank = toRank;
+                        toFile = line[ix++];
+                        toRank = 0;
+                }
+
+                if ('1' <= line[ix] && line[ix] <= '8') {
+                        if (toRank) fromRank = toRank;
+                        toRank = line[ix++];
+                }
+
+                if (line[ix] == '=')
+                        ix++;
+
+                if (isPieceChar(toupper(line[ix])))
+                        promotionPiece = toupper(line[ix++]);
+        }
+
+        while (line[ix] == '+' || line[ix] == '#' || line[ix] == '!' || line[ix] == '?')
+                ix++;
+
+        /*
+         *  Phase 2: Reject if it still doesn't look anything like a move
+         */
+
+        if (isalnum(line[ix]) || line[ix] == '-' || line[ix] == '=')
+                return 0; // Reject garbage following the move
+
+        if (!fromPiece && !toPiece && !promotionPiece) {
+                if (!fromFile && !toFile) return 0;             // Reject "", "3", "34"
+                if (fromRank && !toRank) return 0;              // Reject "3a", "a3b"
+                if (toFile && !toRank && !fromFile) return 0;   // Reject "a"
+        }
+
+        /*
+         *  Phase 3: Search for a unique legal matching move
+         */
+
+        int nrMatches = 0;
+        int matchedMove = 0;
+        int precedence = -1; // -1 no move, 0 regular move, 1 pawn move, 2 queen promotion
+
+        for (int i=0; i<xlen; i++) {
+                int xMove = xmoves[i];
+                int xFrom = from(xMove);
+                int xTo = to(xMove);
+                int xPiece = self->squares[xFrom];
+                int xPromotionPiece = 0;
+                if (isPromotion(self, xFrom, xTo))
+                        xPromotionPiece = promotionPieceToChar[xMove>>promotionBits];
+
+                // Do all parsed elements match with this candidate move, and is it legal?
+                if ((fromPiece      && fromPiece != toupper(pieceToChar[xPiece]))
+                 || (fromFile       && fromFile  != fileToChar(file(xFrom)))
+                 || (fromRank       && fromRank  != rankToChar(rank(xFrom)))
+                 || (toPiece        && toPiece   != toupper(pieceToChar[self->squares[xTo]]))
+                 || (toFile         && toFile    != fileToChar(file(xTo)))
+                 || (toRank         && toRank    != rankToChar(rank(xTo)))
+                 || (promotionPiece && promotionPiece != xPromotionPiece)
+                 || !isLegalMove(self, xMove)
+                ) {
+                        continue;
+                }
+                // else: the candidate move matches
+
+                int xPrecedence = 0;
+                if (xPiece == whitePawn || xPiece == blackPawn)
+                        xPrecedence = (xPromotionPiece == 'Q') ? 2 : 1;
+
+                /*
+                 *  Clash with another match is not bad if the new candidate move
+                 *  is a pawn move and the previous one isn't.
+                 *  This is to accept "bxc3" in the presence "Nb1xc3", for example.
+                 *  Same logic to prefer queening if the promoted piece is not given.
+                 */
+                if (precedence < xPrecedence)
+                        nrMatches = 0;
+
+                if (precedence <= xPrecedence) {
+                        matchedMove = xMove;
+                        precedence = xPrecedence;
+                        nrMatches++;
+                }
+        }
+
+        if (nrMatches == 0)
+                return -1; // Move not legal
+
+        if (nrMatches > 1)
+                return -2; // More than one legal move
+
+        *move = matchedMove;
+        return ix;
+}
+
+/*----------------------------------------------------------------------+
+ |      normalizeEnPassantStatus                                        |
+ +----------------------------------------------------------------------*/
+
+/*
+ *  Helper to normalize the enPassantPawn field
+ */
+static void normalizeEnPassantStatus(Board_t self)
+{
+        int square = self->enPassantPawn;
+        if (!square) return;
+
+        if (sideToMove(self) == white) {
+                if (file(square) != fileA && self->squares[square+stepW] == whitePawn) {
+                        int move = specialMove(square + stepW, square + stepN);
+                        if (isLegalMove(self, move)) return;
+                }
+                if (file(square) != fileH && self->squares[square+stepE] == whitePawn) {
+                        int move = specialMove(square + stepE, square + stepN);
+                        if (isLegalMove(self, move)) return;
+                }
+        } else {
+                if (file(square) != fileA && self->squares[square+stepW] == blackPawn) {
+                        int move = specialMove(square + stepW, square + stepS);
+                        if (isLegalMove(self, move)) return;
+                }
+                if (file(square) != fileH && self->squares[square+stepE] == blackPawn) {
+                        int move = specialMove(square + stepE, square + stepS);
+                        if (isLegalMove(self, move)) return;
+                }
+        }
+
+        self->enPassantPawn = 0; // Clear en passant flag if there is no such legal capture
+}
+
+/*----------------------------------------------------------------------+
+ |      isPromotion                                                     |
+ +----------------------------------------------------------------------*/
+
+static bool isPromotion(Board_t self, int from, int to)
+{
+        return (self->squares[from] == whitePawn && rank(to) == rank8)
+            || (self->squares[from] == blackPawn && rank(to) == rank1);
+}
 
 /*----------------------------------------------------------------------+
  |                                                                      |

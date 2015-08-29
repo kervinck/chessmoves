@@ -22,3 +22,24 @@ for pos, ref in [
         hash = cm.hash(pos)
         result = 'OK' if hash == ref else 'NOK'
         print '0x%016x [ref: 0x%016x] %s %s' % (hash, ref, result, pos)
+
+# Test move parsing
+
+parsePos = '6k1/1P6/8/b1PpP3/4PN2/2N5/8/R3K2R w KQ d6'
+
+for move in [
+        'Ke2', 'Ke', 'cd', 'exd5', 'exd6', 'RxB', 'xB', 'NxP',
+        'foo', 'NP', '123', 'abc',
+        'Ae2', 'b', '78', '8', '7b',
+        'exd',
+        'b8=Q', 'b8', 'b7b8', 'b8=N', 'b8=R', 'b8=B',
+        'b7b8q', 'b7b8r', 'b7b8b', 'b7b8n',
+        'b8=A', 'bKe', 'cxd', 'exd',
+        'O-O', 'O-O-O', 'OO', 'OOO',
+        'o-o', 'o-o-o', 'oo', 'ooo',
+        '0-0', '0-0-0', '00', '000',
+        'O-O-0', 'o-o-o-o', 'o-oo', 'oo-o', 'O-O-', 'o', '0', 'O', 'O--O']:
+        try:
+                print 'parse:', pos, move, '->', cm.move(parsePos, move)
+        except ValueError as err:
+                print err

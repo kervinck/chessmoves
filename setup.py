@@ -7,7 +7,8 @@ module1 = Extension(
                 'Source/Board.c',
                 'Source/polyglot.c',
                 'Source/stringCopy.c' ],
-        extra_compile_args = ['-std=c99', '-pedantic']
+        extra_compile_args = ['-O3', '-std=c99', '-Wall', '-pedantic'],
+        undef_macros = ['NDEBUG']
 )
 
 setup(

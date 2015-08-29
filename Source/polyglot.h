@@ -1,7 +1,10 @@
 
-extern const unsigned long long Random64[781];
-#define RandomPiece     (Random64 + 0)
-#define RandomCastle    (Random64 + 768)
-#define RandomEnPassant (Random64 + 772)
-#define RandomTurn      (Random64 + 780)
+/*
+ *  Reference: http://hardy.uhasselt.be/Toga/book_format.html
+ */
+
+extern const unsigned long long RandomPiece[12*64];
+extern const unsigned long long RandomCastle[4];
+extern const unsigned long long RandomEnPassant[8];
+extern const unsigned long long RandomTurn[1];
 
