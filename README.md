@@ -22,25 +22,42 @@ NAME
 FUNCTIONS
     moves(...)
         moves(position, notation='san') -> { move : newPosition, ... }
-        
+
         Generate all legal moves from a position.
         Return the result as a dictionary, mapping moves to positions.
-        
+
         The `notation' keyword controls the output move syntax.
         Available notations are:
             'san': Standard Algebraic Notation (e.g. Nc3+, O-O, dxe8=Q)
             'long': Long Algebraic Notation (e.g. Nb1-c3+, O-O, d7xe8=Q)
             'uci': Universal Chess Interface computer notation (e.g. b1c3, e8g8, d7e8q)
-    
+
     position(...)
         position(inputFen) -> standardFen
-        
+
         Parse a FEN like string and convert it into a standardized FEN.
         For example:
          - Complete shortened ranks
          - Order castling flags
          - Remove en passant target square if there is no such legal capture
          - Remove excess data beyond the FEN
+
+    move(...)
+        move(fen, inputMove, notation='san') -> move
+
+        Try to parse the input move and return it as a normalized string
+        if successful, legal and unambiguous.
+
+        The parser accepts a wide variety of formats. The only restriction
+        is that piece identifiers, other than promotion pieces, must always
+        be in upper case, and file letters must always be in lower case.
+        Input capture signs, check marks, checkmate marks, annotations
+        (x, +, !, ?, etc) are all swallowed and ignored: these are not used
+        for disambiguation and also not checked for correctness.
+        When a promotion piece is missing, queening is assumed.
+
+        The `notation' keyword controls the output move syntax. See moves(...)
+        for details.
 
    hash(...)
         hash(fen) -> hash

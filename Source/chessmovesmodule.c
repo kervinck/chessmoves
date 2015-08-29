@@ -235,9 +235,21 @@ chessmovesmodule_position(PyObject *self, PyObject *args)
  +----------------------------------------------------------------------*/
 
 PyDoc_STRVAR(move_doc,
-        "move(fen, move, notation='san') -> move\n"
+        "move(fen, inputMove, notation='san') -> move\n"
         "\n"
-        "Parse a move and normalize if it is legal.\n"
+        "Try to parse the input move and return it as a normalized string\n"
+        "if successful, legal and unambiguous. \n"
+        "\n"
+        "The parser accepts a wide variety of formats. The only restriction\n"
+        "is that piece identifiers, other than promotion pieces, must always\n"
+        "be in upper case, and file letters must always be in lower case.\n"
+        "Input capture signs, check marks, checkmate marks, annotations\n"
+        "(x, +, !, ?, etc) are all swallowed and ignored: these are not used\n"
+        "for disambiguation and also not checked for correctness.\n"
+        "When a promotion piece is missing, queening is assumed.\n"
+        "\n"
+        "The `notation' keyword controls the output move syntax. See moves(...)\n"
+        "for details.\n"
 );
 
 static PyObject *
