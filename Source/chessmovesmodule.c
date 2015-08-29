@@ -235,7 +235,7 @@ chessmovesmodule_position(PyObject *self, PyObject *args)
  +----------------------------------------------------------------------*/
 
 PyDoc_STRVAR(move_doc,
-        "move(fen, inputMove, notation='san') -> move\n"
+        "move(inputFen, inputMove, notation='san') -> (move, fen)\n"
         "\n"
         "Try to parse the input move and return it as a normalized string\n"
         "if successful, legal and unambiguous. \n"
@@ -247,6 +247,7 @@ PyDoc_STRVAR(move_doc,
         "(x, +, !, ?, etc) are all swallowed and ignored: these are not used\n"
         "for disambiguation and also not checked for correctness.\n"
         "When a promotion piece is missing, queening is assumed.\n"
+        "The output fen is the position after the move.\n"
         "\n"
         "The `notation' keyword controls the output move syntax. See moves(...)\n"
         "for details.\n"
@@ -292,16 +293,21 @@ chessmovesmodule_move(PyObject *self, PyObject *args, PyObject *keywords)
         if (len == -2)
                 return PyErr_Format(PyExc_ValueError, "Ambiguous move (%s)", moveString);
 
+        char newFen[128];
+
         char newMoveString[maxMoveLen];
         char *s = newMoveString;
         const char *checkmark;
 
+        makeMove(&board, move);
+        boardToFen(&board, newFen);
+
         switch (notationIndex) {
         case uciNotation:
+                undoMove(&board);
                 s = moveToUci(&board, s, move);
                 break;
         case sanNotation:
-                makeMove(&board, move);
                 updateSideInfo(&board);
                 checkmark = getCheckMark(&board);
                 undoMove(&board);
@@ -309,8 +315,7 @@ chessmovesmodule_move(PyObject *self, PyObject *args, PyObject *keywords)
                 s = stringCopy(s, checkmark);
                 break;
         case longNotation:
-                makeMove(&board, move);
-                updateSideInfo(&board);
+                undoMove(&board);
                 checkmark = getCheckMark(&board);
                 undoMove(&board);
                 s = moveToLongAlgebraic(&board, s, move);
@@ -320,7 +325,21 @@ chessmovesmodule_move(PyObject *self, PyObject *args, PyObject *keywords)
                 assert(0);
         }
 
-        return PyString_FromString(newMoveString);
+        PyObject *result = PyTuple_New(2);
+        if (!result)
+                return NULL;
+
+        if (PyTuple_SetItem(result, 0, PyString_FromString(newMoveString))) {
+                Py_DECREF(result);
+                return NULL;
+        }
+
+        if (PyTuple_SetItem(result, 1, PyString_FromString(newFen))) {
+                Py_DECREF(result);
+                return NULL;
+        }
+
+        return result;
 }
 
 /*----------------------------------------------------------------------+

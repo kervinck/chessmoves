@@ -40,6 +40,6 @@ for move in [
         '0-0', '0-0-0', '00', '000',
         'O-O-0', 'o-o-o-o', 'o-oo', 'oo-o', 'O-O-', 'o', '0', 'O', 'O--O']:
         try:
-                print 'parse:', pos, move, '->', cm.move(parsePos, move)
+                print 'parse:', parsePos, move, '->', cm.move(parsePos, move)
         except ValueError as err:
                 print err

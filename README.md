@@ -43,7 +43,7 @@ FUNCTIONS
          - Remove excess data beyond the FEN
 
     move(...)
-        move(fen, inputMove, notation='san') -> move
+        move(inputFen, inputMove, notation='san') -> (move, fen)
 
         Try to parse the input move and return it as a normalized string
         if successful, legal and unambiguous.
@@ -55,6 +55,7 @@ FUNCTIONS
         (x, +, !, ?, etc) are all swallowed and ignored: these are not used
         for disambiguation and also not checked for correctness.
         When a promotion piece is missing, queening is assumed.
+        The output fen is the position after the move.
 
         The `notation' keyword controls the output move syntax. See moves(...)
         for details.
