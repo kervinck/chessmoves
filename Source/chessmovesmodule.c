@@ -138,12 +138,12 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
                 }
 
                 // key is move
-                char moveString[maxMoveLen];
+                char moveString[maxMoveSize];
                 char *s = moveString;
                 const char *checkmark;
 
                 // value is new position
-                char newFen[128];
+                char newFen[maxFenSize];
 
                 switch (notationIndex) {
                 case uciNotation:
@@ -224,7 +224,7 @@ chessmovesmodule_position(PyObject *self, PyObject *args)
         if (len <= 0)
                 return PyErr_Format(PyExc_ValueError, "Invalid FEN (%s)", fen);
 
-        char newFen[128];
+        char newFen[maxFenSize];
         boardToFen(&board, newFen);
 
         return PyString_FromString(newFen);
@@ -293,9 +293,9 @@ chessmovesmodule_move(PyObject *self, PyObject *args, PyObject *keywords)
         if (len == -2)
                 return PyErr_Format(PyExc_ValueError, "Ambiguous move (%s)", moveString);
 
-        char newFen[128];
+        char newFen[maxFenSize];
 
-        char newMoveString[maxMoveLen];
+        char newMoveString[maxMoveSize];
         char *s = newMoveString;
         const char *checkmark;
 

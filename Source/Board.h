@@ -52,7 +52,8 @@ struct side {
 };
 
 #define maxMoves 256
-#define maxMoveLen sizeof("a7-a8=N+")
+#define maxMoveSize sizeof("a7-a8=N+")
+#define maxFenSize 128
 
 struct board {
         signed char squares[boardSize];
@@ -81,6 +82,59 @@ struct board {
         int *movePtr; // For in move generation
 };
 
+/*
+ *  Chess pieces
+ */
+
+enum piece {
+        empty,
+        whiteKing, whiteQueen, whiteRook, whiteBishop, whiteKnight, whitePawn,
+        blackKing, blackQueen, blackRook, blackBishop, blackKnight, blackPawn
+};
+
+enum pieceColor { white = 0, black = 1 };
+
+#define pieceColor(piece) ((piece) >= blackKing) // piece must not be 'empty'
+
+/*
+ *  Game state
+ */
+
+enum castleFlag {
+        castleFlagWhiteKside = 1 << 0,
+        castleFlagWhiteQside = 1 << 1,
+        castleFlagBlackKside = 1 << 2,
+        castleFlagBlackQside = 1 << 3
+};
+
+#define sideToMove(board) ((board)->plyNumber & 1)
+
+/*
+ *  Moves
+ */
+
+/*
+ *  Move integer bits are as follows:
+ *  0-5         to square
+ *  6-11        from square
+ *  12          special flag (castling, promotion, en passant capture, double pawn push)
+ *  13-14       promotion: Q=0, R=1, B=2, N=3
+ */
+
+#define move(from, to)          (((from) << boardBits) | (to))
+enum moveFlags {
+        specialMoveFlag         = 1 << (2*boardBits),
+        promotionBits           = 2*boardBits + 1,
+        queenPromotionFlags     = 0 << promotionBits,
+        rookPromotionFlags      = 1 << promotionBits,
+        bishopPromotionFlags    = 2 << promotionBits,
+        knightPromotionFlags    = 3 << promotionBits
+};
+#define specialMove(from, to)   (specialMoveFlag | move(from, to))
+
+#define from(move)              (((move) >> boardBits) & ~(~0<<boardBits))
+#define to(move)                ( (move)               & ~(~0<<boardBits))
+
 /*----------------------------------------------------------------------+
  |      Data                                                            |
  +----------------------------------------------------------------------*/
@@ -108,8 +162,6 @@ void boardToFen(Board_t self, char *fen);
  */
 unsigned long long hash64(Board_t self);
 
-void updateSideInfo(Board_t self);
-
 /*
  *  Generate all pseudo-legal moves for the position and return the move count
  */
@@ -133,17 +185,17 @@ void undoMove(Board_t self);
  *  A movelist must be prepared by the caller for disambiguation,
  *  which may include the move itself.
  */
-char *moveToStandardAlgebraic(Board_t self, char moveString[maxMoveLen], int move, int xmoves[], int xlen);
+char *moveToStandardAlgebraic(Board_t self, char moveString[maxMoveSize], int move, int xmoves[maxMoves], int xlen);
 
 /*
  *  Convert move to long algebraic notation, without checkmark
  */
-char *moveToLongAlgebraic(Board_t self, char moveString[maxMoveLen], int move);
+char *moveToLongAlgebraic(Board_t self, char moveString[maxMoveSize], int move);
 
 /*
  *  Convert move to computer notation (UCI)
  */
-char *moveToUci(Board_t self, char moveString[maxMoveLen], int move);
+char *moveToUci(Board_t self, char moveString[maxMoveSize], int move);
 
 /*
  *  Determine the check status for the current position ("", "+" or "#")
@@ -158,10 +210,28 @@ const char *getCheckMark(Board_t self);
  *   0: Invalid move syntax
  *  -1: Not a legal move in this position
  *  -2: Ambiguous move
- *
  */
 extern int parseMove(Board_t self, const char *line, int xmoves[maxMoves], int xlen, int *move);
 
+/*
+ *  Update attack tables and king locations. To be used after
+ *  setupBoard or makeMove. Used by generateMoves, inCheck.
+ *  Can be invalidated by moveToStandardAlgebraic,
+ *  getCheckMark, isLegalMove, normalizeEnPassantStatus.
+ */
+void updateSideInfo(Board_t self);
+
+// Clear the ep flag if there are not legal moves
+extern void normalizeEnPassantStatus(Board_t self);
+
+// Side to move in check?
+extern int inCheck(Board_t self);
+
+// Is move legal? Move must come from generateMoves, so be safe to make.
+extern bool isLegalMove(Board_t self, int move);
+
+// Is the move a pawn promotion?
+extern bool isPromotion(Board_t self, int from, int to);
 
 /*----------------------------------------------------------------------+
  |                                                                      |
