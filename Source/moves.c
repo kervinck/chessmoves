@@ -1,7 +1,7 @@
 
 /*----------------------------------------------------------------------+
  |                                                                      |
- |      Board.c                                                         |
+ |      moves.c -- move generator and move making                       |
  |                                                                      |
  +----------------------------------------------------------------------*/
 
@@ -42,23 +42,16 @@
  |      Includes                                                        |
  +----------------------------------------------------------------------*/
 
-/*
- *  Standard includes
- */
+// Standard includes
 #include <assert.h>
-#include <ctype.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
 
-/*
- *  Own includes
- */
+// Own include
 #include "Board.h"
 
-/*
- *  Other module includes
- */
+// Other module includes
 #include "polyglot.h"
 #include "stringCopy.h"
 
@@ -150,7 +143,7 @@ static const signed char knightJump[] = { // Offsets for knight jumps
 
 // Collect knight jump flags
 #define N(sq) [sq]=(\
-             dir(sq,jumpNNW,bitNNW)    +    dir(sq,jumpNNE,bitNNE)+          \
+              dir(sq,jumpNNW,bitNNW)   +   dir(sq,jumpNNE,bitNNE)+           \
                                                                              \
   dir(sq,jumpWNW,bitWNW)   +           +           +   dir(sq,jumpENE,bitENE)\
                                                                              \
@@ -158,7 +151,7 @@ static const signed char knightJump[] = { // Offsets for knight jumps
                                                                              \
   dir(sq,jumpWSW,bitWSW)   +           +           +   dir(sq,jumpESE,bitESE)\
                                                                              \
-            +dir(sq,jumpSSW,bitSSW)    +    dir(sq,jumpSSE,bitSSE))
+             +dir(sq,jumpSSW,bitSSW)   +   dir(sq,jumpSSE,bitSSE))
 
 // 8 bits per square representing which directions a king can step to
 static const unsigned char kingDirections[] = {
@@ -189,60 +182,382 @@ static const unsigned char knightDirections[] = {
  +----------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------+
- |      hash64                                                          |
+ |      generateMoves                                                   |
  +----------------------------------------------------------------------*/
 
-unsigned long long hash64(Board_t self)
+// Helper to emit a regular move
+static void pushMove(Board_t self, int from, int to)
 {
-        unsigned long long key = 0ULL;
+        *self->movePtr++ = move(from, to);
+}
 
-        static const int offsets[] = {
-                [blackPawn]   = 0 * 64, [whitePawn]   = 1 * 64,
-                [blackKnight] = 2 * 64, [whiteKnight] = 3 * 64,
-                [blackBishop] = 4 * 64, [whiteBishop] = 5 * 64,
-                [blackRook]   = 6 * 64, [whiteRook]   = 7 * 64,
-                [blackQueen]  = 8 * 64, [whiteQueen]  = 9 * 64,
-                [blackKing]   = 10 * 64, [whiteKing]  = 11 * 64,
-        };
+// Helper to emit a special move
+static void pushSpecialMove(Board_t self, int from, int to)
+{
+        *self->movePtr++ = specialMove(from, to);
+}
 
-        // piece
-        for (int i=0; i<64; i++) {
-                int file = i & 7;
-                int rank = i >> 3;
-                int square = square(file, rank);
-                int piece = self->squares[square];
-                if (piece == empty) continue;
-                key ^= RandomPiece[offsets[piece] + i];
+// Helper to emit a pawn move
+static void pushPawnMove(Board_t self, int from, int to)
+{
+        if (rank(to) == rank8 || rank(to) == rank1) {
+                pushSpecialMove(self, from, to);
+                self->movePtr[-1] += queenPromotionFlags;
+
+                pushSpecialMove(self, from, to);
+                self->movePtr[-1] += rookPromotionFlags;
+
+                pushSpecialMove(self, from, to);
+                self->movePtr[-1] += bishopPromotionFlags;
+
+                pushSpecialMove(self, from, to);
+                self->movePtr[-1] += knightPromotionFlags;
+        } else
+                pushMove(self, from, to); // normal pawn move
+}
+
+// Helper to generate slider moves
+static void generateSlides(Board_t self, int from, int dirs)
+{
+        dirs &= kingDirections[from];
+        int dir = 0;
+        do {
+                dir -= dirs; // pick next
+                dir &= dirs;
+                int vector = kingStep[dir];
+                int to = from;
+                do {
+                        to += vector;
+                        if (self->squares[to] != empty) {
+                                if (pieceColor(self->squares[to]) != sideToMove(self))
+                                        pushMove(self, from, to);
+                                break;
+                        }
+                        pushMove(self, from, to);
+                } while (dir & kingDirections[to]);
+        } while (dirs -= dir); // remove and go to next
+}
+
+/*
+ *  Pseudo-legal move generator
+ */
+extern int generateMoves(Board_t self, int moveList[maxMoves])
+{
+        assert(self->debugSideInfoPlyNumber == self->plyNumber);
+
+        self->movePtr = moveList;
+
+        for (int from=0; from<boardSize; from++) {
+                int piece = self->squares[from];
+                if (piece == empty || pieceColor(piece) != sideToMove(self)) continue;
+
+                int to;
+
+                /*
+                 *  Generate moves for this piece
+                 */
+                switch (piece) {
+                        int dir, dirs;
+
+                case whiteKing:
+                case blackKing:
+                        dirs = kingDirections[from];
+                        dir = 0;
+                        do {
+                                dir -= dirs; // pick next
+                                dir &= dirs;
+                                to = from + kingStep[dir];
+                                if (self->squares[to] != empty
+                                 && pieceColor(self->squares[to]) == sideToMove(self)) continue;
+                                if (self->xside->attacks[to] != 0) continue;
+                                pushMove(self, from, to);
+                        } while (dirs -= dir); // remove and go to next
+                        break;
+
+                case whiteQueen:
+                case blackQueen:
+                        generateSlides(self, from, dirsQueen);
+                        break;
+
+                case whiteRook:
+                case blackRook:
+                        generateSlides(self, from, dirsRook);
+                        break;
+
+                case whiteBishop:
+                case blackBishop:
+                        generateSlides(self, from, dirsBishop);
+                        break;
+
+                case whiteKnight:
+                case blackKnight:
+                        dirs = knightDirections[from];
+                        dir = 0;
+                        do {
+                                dir -= dirs; // pick next
+                                dir &= dirs;
+                                to = from + knightJump[dir];
+                                if (self->squares[to] != empty
+                                 && pieceColor(self->squares[to]) == sideToMove(self))
+                                        continue;
+                                pushMove(self, from, to);
+                        } while (dirs -= dir); // remove and go to next
+                        break;
+
+                case whitePawn:
+                        if (file(from) != fileH) {
+                                to = from + stepNE;
+                                if (self->squares[to] != empty
+                                 && pieceColor(self->squares[to]) == black)
+                                        pushPawnMove(self, from, to);
+                        }
+                        if (file(from) != fileA) {
+                                to = from + stepNW;
+                                if (self->squares[to] != empty
+                                 && pieceColor(self->squares[to]) == black)
+                                        pushPawnMove(self, from, to);
+                        }
+                        to = from + stepN;
+                        if (self->squares[to] != empty)
+                                break;
+
+                        pushPawnMove(self, from, to);
+                        if (rank(from) == rank2) {
+                                to += stepN;
+                                if (self->squares[to] == empty) {
+                                        pushMove(self, from, to);
+                                        if (self->blackSide.attacks[to+stepS])
+                                                self->movePtr[-1] |= specialMoveFlag;
+                                }
+                        }
+                        break;
+
+                case blackPawn:
+                        if (file(from) != fileH) {
+                                to = from + stepSE;
+                                if (self->squares[to] != empty
+                                 && pieceColor(self->squares[to]) == white)
+                                        pushPawnMove(self, from, to);
+                        }
+                        if (file(from) != fileA) {
+                                to = from + stepSW;
+                                if (self->squares[to] != empty
+                                 && pieceColor(self->squares[to]) == white)
+                                        pushPawnMove(self, from, to);
+                        }
+                        to = from + stepS;
+                        if (self->squares[to] != empty)
+                                break;
+
+                        pushPawnMove(self, from, to);
+                        if (rank(from) == rank7) {
+                                to += stepS;
+                                if (self->squares[to] == empty) {
+                                        pushMove(self, from, to);
+                                        if (self->whiteSide.attacks[to+stepN])
+                                                self->movePtr[-1] |= specialMoveFlag;
+                                }
+                        }
+                        break;
+                }
         }
 
-        // castle
-        if (self->castleFlags & castleFlagWhiteKside) key ^= RandomCastle[0];
-        if (self->castleFlags & castleFlagWhiteQside) key ^= RandomCastle[1];
-        if (self->castleFlags & castleFlagBlackKside) key ^= RandomCastle[2];
-        if (self->castleFlags & castleFlagBlackQside) key ^= RandomCastle[3];
-
-        static const int files[] = {
-                [fileA] = 0, [fileB] = 1, [fileC] = 2, [fileD] = 3,
-                [fileE] = 4, [fileF] = 5, [fileG] = 6, [fileH] = 7,
-        };
-
-        // enpassant
-        normalizeEnPassantStatus(self);
-        int ep = self->enPassantPawn;
-        if (ep != 0) {
-                key ^= RandomEnPassant[files[file(ep)]];
+        /*
+         *  Generate castling moves
+         */
+        if (self->castleFlags && !inCheck(self)) {
+                if (sideToMove(self) == white) {
+                        if ((self->castleFlags & castleFlagWhiteKside)
+                         && self->squares[f1] == empty
+                         && self->squares[g1] == empty
+                         && self->xside->attacks[f1] == 0
+                         && self->xside->attacks[g1] == 0
+                        ) {
+                                pushSpecialMove(self, e1, g1);
+                        }
+                        if ((self->castleFlags & castleFlagWhiteQside)
+                         && self->squares[d1] == empty
+                         && self->squares[c1] == empty
+                         && self->squares[b1] == empty
+                         && self->xside->attacks[d1] == 0
+                         && self->xside->attacks[c1] == 0
+                        ) {
+                                pushSpecialMove(self, e1, c1);
+                        }
+                } else {
+                        if ((self->castleFlags & castleFlagBlackKside)
+                         && self->squares[f8] == empty
+                         && self->squares[g8] == empty
+                         && self->xside->attacks[f8] == 0
+                         && self->xside->attacks[g8] == 0
+                        ) {
+                                pushSpecialMove(self, e8, g8);
+                        }
+                        if ((self->castleFlags & castleFlagBlackQside)
+                         && self->squares[d8] == empty
+                         && self->squares[c8] == empty
+                         && self->squares[b8] == empty
+                         && self->xside->attacks[d8] == 0
+                         && self->xside->attacks[c8] == 0
+                        ) {
+                                pushSpecialMove(self, e8, c8);
+                        }
+                }
         }
 
-        // turn
-        if (sideToMove(self) == white) key ^= RandomTurn[0];
+        /*
+         *  Generate en-passant captures
+         */
+        if (self->enPassantPawn) {
+                int ep = self->enPassantPawn;
 
-        return key;
+                if (sideToMove(self) == white) {
+                        if (file(ep) != fileA && self->squares[ep+stepW] == whitePawn)
+                                pushSpecialMove(self, ep + stepW, ep + stepN);
+                        if (file(ep) != fileH && self->squares[ep+stepE] == whitePawn)
+                                pushSpecialMove(self, ep + stepE, ep + stepN);
+                } else {
+                        if (file(ep) != fileA && self->squares[ep+stepW] == blackPawn)
+                                pushSpecialMove(self, ep + stepW, ep + stepS);
+                        if (file(ep) != fileH && self->squares[ep+stepE] == blackPawn)
+                                pushSpecialMove(self, ep + stepE, ep + stepS);
+                }
+        }
+
+        return self->movePtr - moveList; // nrMoves
 }
 
 /*----------------------------------------------------------------------+
- |      attack tables                                                   |
+ |      make/unmake move                                                |
  +----------------------------------------------------------------------*/
 
+extern void undoMove(Board_t self)
+{
+        signed char *bytes = (signed char *)self;
+        int len = self->undoLen;
+        assert(len > 0);
+        for (;;) {
+                int offset = self->undoStack[--len];
+                if (offset < 0) break; // Found sentinel
+                bytes[offset] = self->undoStack[--len];
+        }
+        self->undoLen = len;
+        self->plyNumber--;
+
+#ifndef NDEBUG
+        if (self->plyNumber < self->debugSideInfoPlyNumber) {
+                self->debugSideInfoPlyNumber = -1; // side info is invalid
+        }
+#endif
+}
+
+extern void makeMove(Board_t self, int move)
+{
+        signed char *sp = &self->undoStack[self->undoLen];
+
+        #define push(offset, value) do{                         \
+                *sp++ = (value);                                \
+                *sp++ = (offset);                               \
+        }while(0)
+
+        #define makeSimpleMove(from, to) do{                    \
+                push(to, self->squares[to]);                    \
+                push(from, self->squares[from]);                \
+                self->squares[to] = self->squares[from];        \
+                self->squares[from] = empty;                    \
+        }while(0)
+
+        *sp++ = -1;                             // Place sentinel
+
+        if (self->enPassantPawn) {              // Always clear en-passant info
+                push(offsetof_enPassantPawn, self->enPassantPawn);
+                self->enPassantPawn = 0;
+        }
+
+        int to   = to(move);
+        int from = from(move);
+
+        if (move & specialMoveFlag) {           // Handle specials first
+                switch (rank(from)) {
+                case rank8:
+                        // Black castles. Insert the corresponding rook move
+                        if (to == g8)
+                                makeSimpleMove(h8, f8);
+                        else
+                                makeSimpleMove(a8, d8);
+                        break;
+
+                case rank7:
+                        if (self->squares[from] == blackPawn) { // Set en-passant flag
+                                push(offsetof_enPassantPawn, 0);
+                                self->enPassantPawn = to;
+                        } else {
+                                // White promotes
+                                push(from, self->squares[from]);
+                                self->squares[from] = whiteQueen + (move >> promotionBits);
+                        }
+                        break;
+
+                case rank5:                    // White captures en-passant
+                case rank4:                    // Black captures en-passant
+                        ;
+                        int square = square(file(to), rank(from));
+                        push(square, self->squares[square]);
+                        self->squares[square] = empty;
+                        break;
+
+                case rank2:
+                        if (self->squares[from] == whitePawn) { // Set en-passant flag
+                                push(offsetof_enPassantPawn, 0);
+                                self->enPassantPawn = to;
+                        } else {
+                                // Black promotes
+                                push(from, self->squares[from]);
+                                self->squares[from] = blackQueen + (move >> promotionBits);
+                        }
+                        break;
+
+                case rank1:
+                        // White castles. Insert the corresponding rook move
+                        if (to == g1)
+                                makeSimpleMove(h1, f1);
+                        else
+                                makeSimpleMove(a1, d1);
+                        break;
+
+                default:
+                        break;
+                }
+        }
+
+        self->plyNumber++;
+
+#if 0 // lastZeroing
+        if (self->squares[to] != empty
+         || self->squares[from] == whitePawn
+         || self->squares[from] == blackPawn
+        ) {
+                push(offsetof_lastZeroing, self->lastZeroing);
+                self->lastZeroing = self->plyNumber;
+        }
+#endif
+
+        makeSimpleMove(from, to);
+
+        int flagsToClear = castleFlagsClear[from] | castleFlagsClear[to];
+        if (self->castleFlags & flagsToClear) {
+                push(offsetof_castleFlags, self->castleFlags);
+                self->castleFlags &= ~flagsToClear;
+        }
+
+        self->undoLen = sp - self->undoStack;
+}
+
+/*----------------------------------------------------------------------+
+ |      updateSideInfo                                                  |
+ +----------------------------------------------------------------------*/
+
+// Helper to update slider attacks
 static void updateSliderAttacks(Board_t self, int from, int dirs, struct side *side)
 {
         dirs &= kingDirections[from];
@@ -345,21 +660,17 @@ extern void updateSideInfo(Board_t self)
                         break;
 
                 case whitePawn:
-                        if (file(from) != fileH) {
+                        if (file(from) != fileH)
                                 self->whiteSide.attacks[from+stepNE] = 1;
-                        }
-                        if (file(from) != fileA) {
+                        if (file(from) != fileA)
                                 self->whiteSide.attacks[from+stepNW] = 1;
-                        }
                         break;
 
                 case blackPawn:
-                        if (file(from) != fileH) {
+                        if (file(from) != fileH)
                                 self->blackSide.attacks[from+stepSE] = 1;
-                        }
-                        if (file(from) != fileA) {
+                        if (file(from) != fileA)
                                 self->blackSide.attacks[from+stepSW] = 1;
-                        }
                         break;
                 }
         }
@@ -370,383 +681,54 @@ extern void updateSideInfo(Board_t self)
 }
 
 /*----------------------------------------------------------------------+
- |      make/unmake move                                                |
+ |      hash64                                                          |
  +----------------------------------------------------------------------*/
 
-extern void undoMove(Board_t self)
+unsigned long long hash64(Board_t self)
 {
-        signed char *bytes = (signed char *)self;
-        int len = self->undoLen;
-        assert(len > 0);
-        for (;;) {
-                int offset = self->undoStack[--len];
-                if (offset < 0) break; // Found sentinel
-                bytes[offset] = self->undoStack[--len];
-        }
-        self->undoLen = len;
-        self->plyNumber--;
+        unsigned long long key = 0ULL;
 
-#ifndef NDEBUG
-        if (self->plyNumber < self->debugSideInfoPlyNumber) {
-                self->debugSideInfoPlyNumber = -1; // side info is invalid
-        }
-#endif
-}
+        static const int offsets[] = {
+                [blackPawn]   = 0 * 64, [whitePawn]   = 1 * 64,
+                [blackKnight] = 2 * 64, [whiteKnight] = 3 * 64,
+                [blackBishop] = 4 * 64, [whiteBishop] = 5 * 64,
+                [blackRook]   = 6 * 64, [whiteRook]   = 7 * 64,
+                [blackQueen]  = 8 * 64, [whiteQueen]  = 9 * 64,
+                [blackKing]   = 10 * 64, [whiteKing]  = 11 * 64,
+        };
 
-extern void makeMove(Board_t self, int move)
-{
-        signed char *sp = &self->undoStack[self->undoLen];
-
-        #define push(offset, value) do{                         \
-                *sp++ = (value);                                \
-                *sp++ = (offset);                               \
-        }while(0)
-
-        #define makeSimpleMove(from, to) do{                    \
-                push(to, self->squares[to]);                    \
-                push(from, self->squares[from]);                \
-                self->squares[to] = self->squares[from];        \
-                self->squares[from] = empty;                    \
-        }while(0)
-
-        *sp++ = -1;                             // Place sentinel
-
-        if (self->enPassantPawn) {              // Always clear en-passant info
-                push(offsetof_enPassantPawn, self->enPassantPawn);
-                self->enPassantPawn = 0;
+        // piece
+        for (int i=0; i<64; i++) {
+                int file = i & 7;
+                int rank = i >> 3;
+                int square = square(file, rank);
+                int piece = self->squares[square];
+                if (piece == empty) continue;
+                key ^= RandomPiece[offsets[piece] + i];
         }
 
-        int to   = to(move);
-        int from = from(move);
+        // castle
+        if (self->castleFlags & castleFlagWhiteKside) key ^= RandomCastle[0];
+        if (self->castleFlags & castleFlagWhiteQside) key ^= RandomCastle[1];
+        if (self->castleFlags & castleFlagBlackKside) key ^= RandomCastle[2];
+        if (self->castleFlags & castleFlagBlackQside) key ^= RandomCastle[3];
 
-        if (move & specialMoveFlag) {           // Handle specials first
-                switch (rank(from)) {
-                case rank8:
-                        // Black castles. Insert the corresponding rook move
-                        if (to == g8) {
-                                makeSimpleMove(h8, f8);
-                        } else {
-                                makeSimpleMove(a8, d8);
-                        }
-                        break;
+        static const int files[] = {
+                [fileA] = 0, [fileB] = 1, [fileC] = 2, [fileD] = 3,
+                [fileE] = 4, [fileF] = 5, [fileG] = 6, [fileH] = 7,
+        };
 
-                case rank7:
-                        if (self->squares[from] == blackPawn) { // Set en-passant flag
-                                push(offsetof_enPassantPawn, 0);
-                                self->enPassantPawn = to;
-                        } else {
-                                // White promotes
-                                push(from, self->squares[from]);
-                                self->squares[from] = whiteQueen + (move >> promotionBits);
-                        }
-                        break;
-
-                case rank5:                    // White captures en-passant
-                case rank4:                    // Black captures en-passant
-                        ;
-                        int square = square(file(to), rank(from));
-                        push(square, self->squares[square]);
-                        self->squares[square] = empty;
-                        break;
-
-                case rank2:
-                        if (self->squares[from] == whitePawn) { // Set en-passant flag
-                                push(offsetof_enPassantPawn, 0);
-                                self->enPassantPawn = to;
-                        } else {
-                                // Black promotes
-                                push(from, self->squares[from]);
-                                self->squares[from] = blackQueen + (move >> promotionBits);
-                        }
-                        break;
-
-                case rank1:
-                        // White castles. Insert the corresponding rook move
-                        if (to == g1) {
-                                makeSimpleMove(h1, f1);
-                        } else {
-                                makeSimpleMove(a1, d1);
-                        }
-                        break;
-
-                default:
-                        break;
-                }
+        // enpassant
+        normalizeEnPassantStatus(self);
+        int ep = self->enPassantPawn;
+        if (ep != 0) {
+                key ^= RandomEnPassant[files[file(ep)]];
         }
 
-        self->plyNumber++;
+        // turn
+        if (sideToMove(self) == white) key ^= RandomTurn[0];
 
-#if 0 // lastZeroing
-        if (self->squares[to] != empty
-         || self->squares[from] == whitePawn
-         || self->squares[from] == blackPawn
-        ) {
-                push(offsetof_lastZeroing, self->lastZeroing);
-                self->lastZeroing = self->plyNumber;
-        }
-#endif
-
-        makeSimpleMove(from, to);
-
-        int flagsToClear = castleFlagsClear[from] | castleFlagsClear[to];
-        if (self->castleFlags & flagsToClear) {
-                push(offsetof_castleFlags, self->castleFlags);
-                self->castleFlags &= ~flagsToClear;
-        }
-
-        self->undoLen = sp - self->undoStack;
-}
-
-/*----------------------------------------------------------------------+
- |      move generator                                                  |
- +----------------------------------------------------------------------*/
-
-static void pushMove(Board_t self, int from, int to)
-{
-        *self->movePtr++ = move(from, to);
-}
-
-static void pushSpecialMove(Board_t self, int from, int to)
-{
-        *self->movePtr++ = specialMove(from, to);
-}
-
-static void pushPawnMove(Board_t self, int from, int to)
-{
-        if (rank(to) == rank8 || rank(to) == rank1) {
-                pushSpecialMove(self, from, to);
-                self->movePtr[-1] += queenPromotionFlags;
-
-                pushSpecialMove(self, from, to);
-                self->movePtr[-1] += rookPromotionFlags;
-
-                pushSpecialMove(self, from, to);
-                self->movePtr[-1] += bishopPromotionFlags;
-
-                pushSpecialMove(self, from, to);
-                self->movePtr[-1] += knightPromotionFlags;
-        } else {
-                pushMove(self, from, to); // normal pawn move
-        }
-}
-
-static void generateSlides(Board_t self, int from, int dirs)
-{
-        dirs &= kingDirections[from];
-        int dir = 0;
-        do {
-                dir -= dirs; // pick next
-                dir &= dirs;
-                int vector = kingStep[dir];
-                int to = from;
-                do {
-                        to += vector;
-                        if (self->squares[to] != empty) {
-                                if (pieceColor(self->squares[to]) != sideToMove(self)) {
-                                        pushMove(self, from, to);
-                                }
-                                break;
-                        }
-                        pushMove(self, from, to);
-                } while (dir & kingDirections[to]);
-        } while (dirs -= dir); // remove and go to next
-}
-
-extern int generateMoves(Board_t self, int moveList[maxMoves])
-{
-        assert(self->debugSideInfoPlyNumber == self->plyNumber);
-
-        self->movePtr = moveList;
-
-        for (int from=0; from<boardSize; from++) {
-                int piece = self->squares[from];
-                if (piece == empty || pieceColor(piece) != sideToMove(self)) continue;
-
-                int to;
-
-                /*
-                 *  Generate moves for this piece
-                 */
-                switch (piece) {
-                        int dir, dirs;
-
-                case whiteKing:
-                case blackKing:
-                        dirs = kingDirections[from];
-                        dir = 0;
-                        do {
-                                dir -= dirs; // pick next
-                                dir &= dirs;
-                                to = from + kingStep[dir];
-                                if (self->squares[to] != empty
-                                 && pieceColor(self->squares[to]) == sideToMove(self)) continue;
-                                if (self->xside->attacks[to] != 0) continue;
-                                pushMove(self, from, to);
-                        } while (dirs -= dir); // remove and go to next
-                        break;
-
-                case whiteQueen:
-                case blackQueen:
-                        generateSlides(self, from, dirsQueen);
-                        break;
-
-                case whiteRook:
-                case blackRook:
-                        generateSlides(self, from, dirsRook);
-                        break;
-
-                case whiteBishop:
-                case blackBishop:
-                        generateSlides(self, from, dirsBishop);
-                        break;
-
-                case whiteKnight:
-                case blackKnight:
-                        dirs = knightDirections[from];
-                        dir = 0;
-                        do {
-                                dir -= dirs; // pick next
-                                dir &= dirs;
-                                to = from + knightJump[dir];
-                                if (self->squares[to] != empty
-                                 && pieceColor(self->squares[to]) == sideToMove(self)) {
-                                        continue;
-                                }
-                                pushMove(self, from, to);
-                        } while (dirs -= dir); // remove and go to next
-                        break;
-
-                case whitePawn:
-                        if (file(from) != fileH) {
-                                to = from + stepNE;
-                                if (self->squares[to] != empty
-                                 && pieceColor(self->squares[to]) == black) {
-                                        pushPawnMove(self, from, to);
-                                }
-                        }
-                        if (file(from) != fileA) {
-                                to = from + stepNW;
-                                if (self->squares[to] != empty
-                                 && pieceColor(self->squares[to]) == black) {
-                                        pushPawnMove(self, from, to);
-                                }
-                        }
-                        to = from + stepN;
-                        if (self->squares[to] != empty) {
-                                break;
-                        }
-                        pushPawnMove(self, from, to);
-                        if (rank(from) == rank2) {
-                                to += stepN;
-                                if (self->squares[to] == empty) {
-                                        pushMove(self, from, to);
-                                        if (self->blackSide.attacks[to+stepS]) {
-                                                self->movePtr[-1] |= specialMoveFlag;
-                                        }
-                                }
-                        }
-                        break;
-
-                case blackPawn:
-                        if (file(from) != fileH) {
-                                to = from + stepSE;
-                                if (self->squares[to] != empty
-                                 && pieceColor(self->squares[to]) == white) {
-                                        pushPawnMove(self, from, to);
-                                }
-                        }
-                        if (file(from) != fileA) {
-                                to = from + stepSW;
-                                if (self->squares[to] != empty
-                                 && pieceColor(self->squares[to]) == white) {
-                                        pushPawnMove(self, from, to);
-                                }
-                        }
-                        to = from + stepS;
-                        if (self->squares[to] != empty) {
-                                break;
-                        }
-                        pushPawnMove(self, from, to);
-                        if (rank(from) == rank7) {
-                                to += stepS;
-                                if (self->squares[to] == empty) {
-                                        pushMove(self, from, to);
-                                        if (self->whiteSide.attacks[to+stepN]) {
-                                                self->movePtr[-1] |= specialMoveFlag;
-                                        }
-                                }
-                        }
-                        break;
-                }
-        }
-
-        /*
-         *  Generate castling moves
-         */
-        if (self->castleFlags && !inCheck(self)) {
-                if (sideToMove(self) == white) {
-                        if ((self->castleFlags & castleFlagWhiteKside)
-                         && self->squares[f1] == empty
-                         && self->squares[g1] == empty
-                         && self->xside->attacks[f1] == 0
-                         && self->xside->attacks[g1] == 0
-                        ) {
-                                pushSpecialMove(self, e1, g1);
-                        }
-                        if ((self->castleFlags & castleFlagWhiteQside)
-                         && self->squares[d1] == empty
-                         && self->squares[c1] == empty
-                         && self->squares[b1] == empty
-                         && self->xside->attacks[d1] == 0
-                         && self->xside->attacks[c1] == 0
-                        ) {
-                                pushSpecialMove(self, e1, c1);
-                        }
-                } else {
-                        if ((self->castleFlags & castleFlagBlackKside)
-                         && self->squares[f8] == empty
-                         && self->squares[g8] == empty
-                         && self->xside->attacks[f8] == 0
-                         && self->xside->attacks[g8] == 0
-                        ) {
-                                pushSpecialMove(self, e8, g8);
-                        }
-                        if ((self->castleFlags & castleFlagBlackQside)
-                         && self->squares[d8] == empty
-                         && self->squares[c8] == empty
-                         && self->squares[b8] == empty
-                         && self->xside->attacks[d8] == 0
-                         && self->xside->attacks[c8] == 0
-                        ) {
-                                pushSpecialMove(self, e8, c8);
-                        }
-                }
-        }
-
-        /*
-         *  Generate en-passant captures
-         */
-        if (self->enPassantPawn) {
-                int ep = self->enPassantPawn;
-
-                if (sideToMove(self) == white) {
-                        if (file(ep) != fileA && self->squares[ep+stepW] == whitePawn) {
-                                pushSpecialMove(self, ep + stepW, ep + stepN);
-                        }
-                        if (file(ep) != fileH && self->squares[ep+stepE] == whitePawn) {
-                                pushSpecialMove(self, ep + stepE, ep + stepN);
-                        }
-                } else {
-                        if (file(ep) != fileA && self->squares[ep+stepW] == blackPawn) {
-                                pushSpecialMove(self, ep + stepW, ep + stepS);
-                        }
-                        if (file(ep) != fileH && self->squares[ep+stepE] == blackPawn) {
-                                pushSpecialMove(self, ep + stepE, ep + stepS);
-                        }
-                }
-        }
-
-        return self->movePtr - moveList; // nrMoves
+        return key;
 }
 
 /*----------------------------------------------------------------------+
@@ -786,9 +768,6 @@ int inCheck(Board_t self)
  |      normalizeEnPassantStatus                                        |
  +----------------------------------------------------------------------*/
 
-/*
- *  Helper to normalize the enPassantPawn field
- */
 void normalizeEnPassantStatus(Board_t self)
 {
         int square = self->enPassantPawn;

@@ -1,7 +1,7 @@
 
 /*----------------------------------------------------------------------+
  |                                                                      |
- |      Board-format.c                                                  |
+ |      format.c -- converting between internal data and text formats   |
  |                                                                      |
  +----------------------------------------------------------------------*/
 
@@ -42,23 +42,15 @@
  |      Includes                                                        |
  +----------------------------------------------------------------------*/
 
-/*
- *  Standard includes
- */
-#include <assert.h>
+// Standard includes
 #include <ctype.h>
 #include <stdbool.h>
-#include <stddef.h>
 #include <string.h>
 
-/*
- *  Own include
- */
+// Own include
 #include "Board.h"
 
-/*
- *  Other module includes
- */
+// Other module includes
 #include "polyglot.h"
 #include "stringCopy.h"
 
@@ -190,9 +182,8 @@ extern int setupBoard(Board_t self, const char *fen)
                 self->enPassantPawn = square(file, rank);
         } else {
                 self->enPassantPawn = 0;
-                if (fen[ix] == '-') {
+                if (fen[ix] == '-')
                         ix++;
-                }
         }
 
 #ifndef NDEBUG
@@ -212,7 +203,6 @@ extern int setupBoard(Board_t self, const char *fen)
 /*
  *  Convert into UCI notation
  */
-
 extern char *moveToUci(Board_t self, char moveString[maxMoveSize], int move)
 {
         int from = from(move);
@@ -242,18 +232,15 @@ extern char *moveToLongAlgebraic(Board_t self, char moveString[maxMoveSize], int
         int to   = to(move);
 
         // Castling
-        if (move == specialMove(e1, c1) || move == specialMove(e8, c8)) {
+        if (move == specialMove(e1, c1) || move == specialMove(e8, c8))
                 return stringCopy(moveString, "O-O-O");
-        }
-        if (move == specialMove(e1, g1) || move == specialMove(e8, g8)) {
+        if (move == specialMove(e1, g1) || move == specialMove(e8, g8))
                 return stringCopy(moveString, "O-O");
-        }
 
         // Piece identifier
         char pieceChar = toupper(pieceToChar[self->squares[from]]);
-        if (pieceChar != 'P') {
+        if (pieceChar != 'P')
                 *moveString++ = pieceChar;
-        }
 
         // From square
         *moveString++ = fileToChar(file(from));
@@ -288,17 +275,15 @@ extern char *moveToStandardAlgebraic(Board_t self, char moveString[maxMoveSize],
         int from = from(move);
         int to   = to(move);
 
-        if (move == specialMove(e1, c1) || move == specialMove(e8, c8)) {
+        if (move == specialMove(e1, c1) || move == specialMove(e8, c8))
                 return stringCopy(moveString, "O-O-O");
-        }
-        if (move == specialMove(e1, g1) || move == specialMove(e8, g8)) {
+
+        if (move == specialMove(e1, g1) || move == specialMove(e8, g8))
                 return stringCopy(moveString, "O-O");
-        }
 
         if (self->squares[from] == whitePawn || self->squares[from] == blackPawn) {
-                /*
-                 *  Pawn moves are a bit special
-                 */
+                // Pawn moves are a bit special
+
                 if (file(from) != file(to)) {
                         *moveString++ = fileToChar(file(from));
                         *moveString++ = 'x';
@@ -306,9 +291,7 @@ extern char *moveToStandardAlgebraic(Board_t self, char moveString[maxMoveSize],
                 *moveString++ = fileToChar(file(to));
                 *moveString++ = rankToChar(rank(to));
 
-                /*
-                 *  Promote to piece (=Q, =R, =B, =N)
-                 */
+                // Promote to piece (=Q, =R, =B, =N)
                 if (isPromotion(self, from, to)) {
                         *moveString++ = '=';
                         *moveString++ = promotionPieceToChar[move>>promotionBits];
@@ -317,14 +300,10 @@ extern char *moveToStandardAlgebraic(Board_t self, char moveString[maxMoveSize],
                 return moveString;
         }
 
-        /*
-         *  Piece identifier (K, Q, R, B, N)
-         */
+        // Piece identifier (K, Q, R, B, N)
         *moveString++ = toupper(pieceToChar[self->squares[from]]);
 
-        /*
-         *  Disambiguate using from square information where needed
-         */
+        //  Disambiguate using from square information where needed
         int filex = 0, rankx = 0;
         for (int i=0; i<xlen; i++) {
                 int xMove = xMoves[i];
@@ -340,14 +319,10 @@ extern char *moveToStandardAlgebraic(Board_t self, char moveString[maxMoveSize],
         if (rankx != filex) *moveString++ = fileToChar(file(from)); // Skip if both are 0 or 1
         if (filex)          *moveString++ = rankToChar(rank(from));
 
-        /*
-         *  Capture sign
-         */
+        // Capture sign
         if (self->squares[to] != empty) *moveString++ = 'x';
 
-        /*
-         *  To square
-         */
+        // To square
         *moveString++ = fileToChar(file(to));
         *moveString++ = rankToChar(rank(to));
 
@@ -360,7 +335,7 @@ extern char *moveToStandardAlgebraic(Board_t self, char moveString[maxMoveSize],
  +----------------------------------------------------------------------*/
 
 /*
- *  Produce a checkmark ('+' or '#').
+ *  Produce a checkmark ('+' or '#')
  *  The move must already be made and sideInfo computed.
  *  sideInfo might be invalid after this function.
  */
@@ -426,9 +401,8 @@ extern void boardToFen(Board_t self, char *fen)
                 if (self->castleFlags & castleFlagWhiteQside) *fen++ = 'Q';
                 if (self->castleFlags & castleFlagBlackKside) *fen++ = 'k';
                 if (self->castleFlags & castleFlagBlackQside) *fen++ = 'q';
-        } else {
+        } else
                 *fen++ = '-';
-        }
 
         /*
          *  En-passant square
@@ -438,23 +412,22 @@ extern void boardToFen(Board_t self, char *fen)
         if (self->enPassantPawn) {
                 *fen++ = fileToChar(file(self->enPassantPawn));
                 *fen++ = rankToChar((sideToMove(self) == white) ? rank6 : rank3);
-        } else {
+        } else
                 *fen++ = '-';
-        }
 
         /*
-         *  Move number
+         *  Move number (TODO)
          */
 
         /*
-         *  Halfmove clock
+         *  Halfmove clock (TODO)
          */
 
         *fen = '\0';
 }
 
 /*----------------------------------------------------------------------+
- |      move parser                                                     |
+ |      Move parser                                                     |
  +----------------------------------------------------------------------*/
 
 /*
@@ -483,7 +456,7 @@ static int parseCastling(const char *line, int *len)
 static bool isPieceChar(int c)
 {
         const char *s = strchr("KQRBNP", c);
-        return s != NULL && *s != '\0';
+        return (s != NULL) && (*s != '\0');
 }
 
 extern int parseMove(Board_t self, const char *line, int xMoves[maxMoves], int xlen, int *move)
@@ -492,7 +465,7 @@ extern int parseMove(Board_t self, const char *line, int xMoves[maxMoves], int x
          *  Phase 1: extract as many as possible move elements from input
          */
 
-        int ix = 0; // index into line[]
+        int ix = 0; // index into line
 
         /*
          *  The line elements for move disambiguation
@@ -524,8 +497,10 @@ extern int parseMove(Board_t self, const char *line, int xMoves[maxMoves], int x
                 toFile = 'c';
                 ix += castleLen;
         } else {                        // Regular move
-                if (isPieceChar(line[ix]))
+                if (isPieceChar(line[ix])) {
                         fromPiece = line[ix++];
+                        if (line[ix] == '/') ix++; // ICS madness
+                }
 
                 if ('a' <= line[ix] && line[ix] <= 'h')
                         toFile = line[ix++];
@@ -594,7 +569,7 @@ extern int parseMove(Board_t self, const char *line, int xMoves[maxMoves], int x
                 if (isPromotion(self, xFrom, xTo))
                         xPromotionPiece = promotionPieceToChar[xMove>>promotionBits];
 
-                // Do all parsed elements match with this candidate move, and is it legal?
+                // Do all parsed elements match with this candidate move? And is it legal?
                 if ((fromPiece      && fromPiece != toupper(pieceToChar[xPiece]))
                  || (fromFile       && fromFile  != fileToChar(file(xFrom)))
                  || (fromRank       && fromRank  != rankToChar(rank(xFrom)))
