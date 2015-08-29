@@ -4,8 +4,8 @@ module1 = Extension(
         'chessmoves',
         sources = [
                 'Source/chessmovesmodule.c',
-                'Source/Board-format.c',
-                'Source/Board-moves.c',
+                'Source/format.c',
+                'Source/moves.c',
                 'Source/polyglot.c',
                 'Source/stringCopy.c' ],
         extra_compile_args = ['-O3', '-std=c99', '-Wall', '-pedantic'],
