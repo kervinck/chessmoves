@@ -1,6 +1,6 @@
 from distutils.core import setup, Extension
 
-module1 = Extension(
+ext = Extension(
         'chessmoves',
         sources = [
                 'Source/chessmovesmodule.c',
@@ -19,4 +19,4 @@ setup(
         author       = 'Marcel van Kervinck',
         author_email = 'marcelk@bitpit.net',
         url          = 'http://marcelk.net/chessmoves',
-        ext_modules  = [module1])
+        ext_modules  = [ext])
