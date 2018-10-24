@@ -169,13 +169,13 @@ chessmovesmodule_moves(PyObject *self, PyObject *args, PyObject *keywords)
                         assert(0);
                 }
 
-                PyObject *key = PyString_FromString(moveString);
+                PyObject *key = PyUnicode_FromString(moveString);
                 if (!key) {
                         Py_DECREF(dict);
                         return NULL;
                 }
 
-                PyObject *value = PyString_FromString(newFen);
+                PyObject *value = PyUnicode_FromString(newFen);
                 if (!value) {
                         Py_DECREF(dict);
                         Py_DECREF(key);
@@ -227,7 +227,7 @@ chessmovesmodule_position(PyObject *self, PyObject *args)
         char newFen[maxFenSize];
         boardToFen(&board, newFen);
 
-        return PyString_FromString(newFen);
+        return PyUnicode_FromString(newFen);
 }
 
 /*----------------------------------------------------------------------+
@@ -329,12 +329,12 @@ chessmovesmodule_move(PyObject *self, PyObject *args, PyObject *keywords)
         if (!result)
                 return NULL;
 
-        if (PyTuple_SetItem(result, 0, PyString_FromString(newMoveString))) {
+        if (PyTuple_SetItem(result, 0, PyUnicode_FromString(newMoveString))) {
                 Py_DECREF(result);
                 return NULL;
         }
 
-        if (PyTuple_SetItem(result, 1, PyString_FromString(newFen))) {
+        if (PyTuple_SetItem(result, 1, PyUnicode_FromString(newFen))) {
                 Py_DECREF(result);
                 return NULL;
         }
@@ -381,27 +381,40 @@ static PyMethodDef chessmovesMethods[] = {
 	{ "position", chessmovesmodule_position,           METH_VARARGS,               position_doc },
 	{ "hash",     chessmovesmodule_hash,               METH_VARARGS,               hash_doc },
 	{ "move",     (PyCFunction)chessmovesmodule_move,  METH_VARARGS|METH_KEYWORDS, move_doc },
-	{ NULL, }
+	{ NULL }
 };
+
+static PyModuleDef chessmoves = {
+    PyModuleDef_HEAD_INIT,
+    "chessmoves",
+    chessmoves_doc,
+    -1,
+    chessmovesMethods,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
+
+static PyObject *SpamError;
 
 /*----------------------------------------------------------------------+
  |      initchessmoves                                                  |
  +----------------------------------------------------------------------*/
 
-PyMODINIT_FUNC
-initchessmoves(void)
+PyMODINIT_FUNC PyInit_chessmoves(void)
 {
-	PyObject *module;
+    	PyObject *module;
 
         // Create the module and add the functions
-        module = Py_InitModule3("chessmoves", chessmovesMethods, chessmoves_doc);
+        module = PyModule_Create(&chessmoves);
         if (module == NULL) {
-                return;
+                return NULL;
         }
 
         // Add startPosition as a string constant
         if (PyModule_AddStringConstant(module, "startPosition", startpos)) {
-                return;
+                return NULL;
         }
 
         /*
@@ -410,20 +423,22 @@ initchessmoves(void)
 
         PyObject *list = PyList_New(nrNotations);
         if (!list) {
-                return;
+            return NULL;
         }
 
         for (int i=0; i<nrNotations; i++) {
-                if (PyList_SetItem(list, i, PyString_FromString(notations[i]))) {
+                if (PyList_SetItem(list, i, PyUnicode_FromString(notations[i]))) {
                         Py_DECREF(list);
-                        return;
+                        return NULL;
                 }
         }
 
         if (PyModule_AddObject(module, "notations", list)) {
                 Py_DECREF(list);
-                return;
+                return NULL;
         }
+
+        return module;
 }
 
 /*----------------------------------------------------------------------+
